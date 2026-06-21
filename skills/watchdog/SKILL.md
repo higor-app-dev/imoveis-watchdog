@@ -5,8 +5,8 @@ Skill core para comparar resultados de extração entre execuções e notificar 
 ## Fluxo
 
 1. **Extrair** dados do portal (via skill específica)
-2. **Parsear** para schema unificado
-3. **Comparar** com resultado anterior (`data/results/ultimo_<portal>.json`)
+2. **Parsear** para schema unificado (Imovel dataclass)
+3. **Comparar** com resultado anterior usando `opportunity_detector.detect()`
 4. **Detectar** mudanças:
    - 🆕 Imóveis novos
    - ❌ Imóveis removidos (venderam/alugaram)
@@ -19,7 +19,7 @@ Skill core para comparar resultados de extração entre execuções e notificar 
 ```json
 {
   "id": "string (id do portal)",
-  "portal": "quintoandar | loft",
+  "portal": "emcasa | quintoandar | loft | olx",
   "url": "string",
   "tipo": "compra | aluguel",
   "preco": number,
@@ -41,30 +41,55 @@ Skill core para comparar resultados de extração entre execuções e notificar 
 }
 ```
 
-## Detecção de Oportunidades
+## Detecção de Oportunidades (`opportunity_detector.py`)
 
-### Redução de Preço
-Comparar `preco_atual < preco_anterior * 0.95` (5%+ de redução).
+Módulo universal que detecta oportunidades usando 3 estratégias em cascata:
 
-### Imóvel Novo
-ID não existia na execução anterior.
+### 1. priceChangePercent (Portal)
+Quando o portal já calcula a variação (ex.: EmCasa), usa o valor direto.
+- Origem: `'EmCasa'`
+- Não recalcula — confia no dado do servidor
+- Mesmo que o estado anterior tenha o mesmo preço, a detecção acontece
+  porque o portal reportou a mudança
 
-### Imóvel Barato na Região
-Preço abaixo da média do bairro em mais de 1 desvio padrão.
+### 2. previousPrice (_extra)
+Quando o portal fornece o preço anterior (sem o percentual).
+- Calcula: `(preco_atual - previousPrice) / previousPrice * 100`
+- Origem: `'EmCasa'` (ou nome da fonte)
 
-## Formato de Notificação
+### 3. Diff de Estado (Watchdog)
+Quando não há dados do portal, compara com estado anterior salvo.
+- Origem: `'Watchdog'`
+- Fallback para portais que não expõem histórico de preço
 
+### Estrutura de Opportunity
+
+```python
+@dataclass
+class Opportunity:
+    tipo: str       # novo | removido | queda_preco | aumento_preco
+    imovel: Imovel
+    origem: str     # 'EmCasa' | 'Watchdog' | 'Olx' etc.
+    change_pct: Optional[float]
+    old_price: Optional[float]
+    new_price: Optional[float]
+    detalhes: dict
 ```
-🏠 *QuintoAndar — 3 novidades*
-🆕 Novo: Apt 2qt R$350k na Vila Mariana
-📉 Redução: Apt 3qt R$420k → R$380k (-9.5%) em Santana
-❌ Removido: Kitnet R$250k no Centro
 
-🔗 Ver no QuintoAndar
+### Uso
+
+```python
+from skills.watchdog.opportunity_detector import detect, build_notification_text
+
+opps = detect(imoveis_atuais, imoveis_anteriores)
+for opp in opps:
+    print(opp.resumo())       # "📉 R$ 900.000 → R$ 850.000 (-5.6%) — Apto 3q (EmCasa)"
+
+text = build_notification_text(opps)
+send_telegram(text)
 ```
 
 ## Arquivos de Estado
 
-- `data/results/ultimo_quintoandar.json` — última extração
-- `data/results/ultimo_loft.json` — última extração
+- `data/results/ultimo_<portal>.json` — última extração
 - `data/results/historico/` — histórico completo
