@@ -1,0 +1,84 @@
+# CI Workflow — Watchdog de Imóveis
+#
+# Executa extração de teste sempre que há push na main ou em PRs,
+# e também em schedule diário para validar que o pipeline continua
+# funcionando com as dependências atuais.
+#
+# O workflow:
+#   1. Checkout do repositório
+#   2. Setup do Python
+#   3. Instala dependências
+#   4. Executa extração de teste com dados mockados
+#   5. Verifica que os arquivos de saída foram gerados
+#   6. Salva os resultados como artefato
+
+name: Watchdog CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  test-extraction:
+    name: Test extraction with mock data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "Dependencies installed"
+
+      - name: Run test extraction
+        run: python tests/test_extraction.py
+        env:
+          HERMES_WATCHDOG_CONFIG: ${{ github.workspace }}/watchdog.yaml
+
+      - name: Verify output files exist
+        run: |
+          echo "=== Output files ==="
+          ls -la data/results/
+
+          EXTRACT_COUNT=$(find data/results -name 'test_extraction_*.json' | wc -l)
+          SUMMARY_COUNT=$(find data/results -name 'test_summary_*.json' | wc -l)
+
+          if [ "$EXTRACT_COUNT" -lt 1 ]; then
+            echo "No extraction output files found!"
+            exit 1
+          fi
+          echo "Extraction files: $EXTRACT_COUNT"
+
+          if [ "$SUMMARY_COUNT" -lt 1 ]; then
+            echo "No summary output files found!"
+            exit 1
+          fi
+          echo "Summary files: $SUMMARY_COUNT"
+
+          echo ""
+          echo "All output files verified successfully"
+
+      - name: Save extraction results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extraction-results
+          path: data/results/
+          retention-days: 7
+          if-no-files-found: error

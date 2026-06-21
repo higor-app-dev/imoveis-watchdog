@@ -1,0 +1,56 @@
+# Watchdog de Imóveis — Targets de Busca
+# Edite este arquivo para configurar quais cidades, bairros e faixas de preço
+# o watchdog deve monitorar. O pipeline lê este arquivo a cada tick.
+
+watchdog:
+  cities:
+    - name: "São Paulo"
+      state: "SP"
+      uf: "SP"
+    - name: "Rio de Janeiro"
+      state: "RJ"
+      uf: "RJ"
+    - name: "Belo Horizonte"
+      state: "MG"
+      uf: "MG"
+
+  neighborhoods:
+    - name: "Centro"
+      city: "São Paulo"
+    - name: "Pinheiros"
+      city: "São Paulo"
+    - name: "Vila Mariana"
+      city: "São Paulo"
+    - name: "Copacabana"
+      city: "Rio de Janeiro"
+    - name: "Ipanema"
+      city: "Rio de Janeiro"
+    - name: "Savassi"
+      city: "Belo Horizonte"
+    - name: "Lourdes"
+      city: "Belo Horizonte"
+
+  price_ranges:
+    - label: "econômico"
+      min: 150000
+      max: 350000
+    - label: "médio"
+      min: 350000
+      max: 700000
+    - label: "alto"
+      min: 700000
+      max: 1500000
+    - label: "luxo"
+      min: 1500000
+      max: 5000000
+
+  property_types:
+    - "apartamento"
+    - "casa"
+    - "kitnet"
+    - "cobertura"
+
+  options:
+    min_bedrooms: 2
+    max_age_days: 30
+    max_results_per_query: 50

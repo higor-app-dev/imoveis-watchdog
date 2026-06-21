@@ -1,0 +1,32 @@
+# Alvos de busca do Imóveis Watchdog
+# Edite este arquivo para configurar quais imóveis monitorar
+
+quinto_andar:
+  compra:
+    - cidade: "sao-paulo-sp-brasil"
+      bairros: []  # vazio = todos
+      tipos: ["apartamento"]
+      preco_max: null
+      quartos_min: null
+  
+  aluguel:
+    - cidade: "sao-paulo-sp-brasil"
+      bairros: []
+      preco_max: 5000
+      quartos_min: 2
+
+loft:
+  compra:
+    - cidade: "sp/sao-paulo"
+      bairros: []  # ex: ["bela-vista", "consolacao"]
+      tipos: ["apartamentos"]
+      preco_max: null
+      quartos_min: null
+
+# Config geral
+geral:
+  intervalo_horas: 6  # a cada 6 horas
+  notificar_telegram: true
+  notificar_remocoes: true
+  notificar_reducoes: true
+  notificar_novos: true

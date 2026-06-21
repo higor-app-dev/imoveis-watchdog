@@ -1,0 +1,10 @@
+{
+  "name": "context7",
+  "description": "Context7 MCP \u2014 documentation queries for libraries/frameworks",
+  "url": "https://mcp.context7.com/mcp",
+  "auth": "header",
+  "tools": [
+    "resolve_library_id",
+    "query_docs"
+  ]
+}

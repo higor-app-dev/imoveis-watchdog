@@ -1,0 +1,6 @@
+# Dependências do Watchdog de Imóveis
+# Para o pipeline completo (busca OLX):
+# pip install -r requirements.txt
+
+cloudscraper>=1.2.0
+pyyaml>=6.0

@@ -1,0 +1,14 @@
+{
+  "name": "jina-mcp",
+  "description": "Jina AI MCP \u2014 web search, read URLs, image search, classify, deduplicate",
+  "url": "https://mcp.jina.ai/v1",
+  "tools": [
+    "search_web",
+    "read_url",
+    "search_images",
+    "classify_text",
+    "deduplicate_strings",
+    "expand_query",
+    "sort_by_relevance"
+  ]
+}
