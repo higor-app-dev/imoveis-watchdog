@@ -1,0 +1,71 @@
+{
+  "pageProps": {
+    "initialState": {
+      "houses": [
+        {
+          "id": 892820623,
+          "salePrice": 1000000,
+          "area": 105,
+          "bedrooms": 3,
+          "bathrooms": 2,
+          "parkingSpots": 3,
+          "type": "Apartamento",
+          "address": {
+            "address": "R. Mal. Hermes da Fonseca, 123",
+            "city": "São Paulo",
+            "stateCode": "SP",
+            "neighborhood": "Santana"
+          },
+          "citySlug": "sao-paulo-sp-brasil",
+          "publishDate": "2026-06-15T10:30:00Z"
+        },
+        {
+          "id": "listing-456",
+          "salePrice": 550000,
+          "area": 60,
+          "bedrooms": 2,
+          "bathrooms": 2,
+          "parkingSpots": 1,
+          "type": "Apartamento",
+          "citySlug": "sao-paulo-sp-brasil"
+        },
+        {
+          "id": "minimal-rent",
+          "rentPrice": 3200,
+          "type": "Studio",
+          "neighbourhood": "Vila Mariana",
+          "citySlug": "sao-paulo-sp-brasil"
+        },
+        {
+          "id": "without-address",
+          "salePrice": 420000,
+          "type": "Casa",
+          "citySlug": "sao-paulo-sp-brasil"
+        },
+        {
+          "id": null,
+          "listingId": "fallback-id-789",
+          "salePrice": 380000,
+          "type": "Kitnet"
+        },
+        {
+          "id": "com-custom-type",
+          "salePrice": 750000,
+          "type": "Sobrado Moderno"
+        },
+        {
+          "id": "aluguel-only",
+          "rentPrice": 4500,
+          "condoIptu": {"condoFee": 1000},
+          "area": 88
+        },
+        {
+          "listingId": "no-id-field",
+          "salePrice": 320000,
+          "area": 50,
+          "type": { "name": "Apartamento", "code": "APT" }
+        }
+      ]
+    }
+  }
+}
