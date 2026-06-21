@@ -1,0 +1,77 @@
+{
+    "pageProps": {
+        "initialState": {
+            "houses": [
+                {
+                    "id": "892820623",
+                    "salePrice": 1000000,
+                    "rentPrice": 3700,
+                    "area": 105,
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "parkingSpots": 3,
+                    "type": "Apartamento",
+                    "address": {
+                        "address": "R. Mal. Hermes da Fonseca, 123",
+                        "city": "São Paulo",
+                        "stateCode": "SP",
+                        "neighborhood": "Santana"
+                    },
+                    "neighbourhood": "Santana",
+                    "regionName": "Santana",
+                    "condoIptu": {"condoFee": 800, "iptu": 150.50},
+                    "forSale": true,
+                    "shortSaleDescription": "Apartamento para comprar em Santana com 3 quartos, 2 banheiros",
+                    "description": "Ótimo apartamento na região de Santana, perto do metrô.",
+                    "title": "Apartamento 3 quartos em Santana",
+                    "amenities": ["Piscina", "Academia", "Salão de Festas", "Portaria 24h"],
+                    "photos": [
+                        {"url": "https://img.quintoandar.com.br/foto1.jpg"},
+                        {"url": "https://img.quintoandar.com.br/foto2.jpg"}
+                    ],
+                    "citySlug": "sao-paulo-sp-brasil",
+                    "publishDate": "2026-06-15T10:30:00Z"
+                },
+                {
+                    "id": "456789",
+                    "salePrice": 550000,
+                    "area": 60,
+                    "bedrooms": 2,
+                    "bathrooms": 2,
+                    "parkingSpots": 1,
+                    "type": "Apartamento",
+                    "address": {
+                        "city": "São Paulo",
+                        "stateCode": "SP",
+                        "neighborhood": "Consolação"
+                    },
+                    "neighbourhood": "Consolação",
+                    "regionName": "Consolação",
+                    "condoIptu": {},
+                    "forSale": true,
+                    "title": "Apartamento 2 quartos na Consolação",
+                    "citySlug": "sao-paulo-sp-brasil"
+                },
+                {
+                    "id": "987654",
+                    "rentPrice": 3200,
+                    "area": 42,
+                    "bedrooms": 1,
+                    "bathrooms": 1,
+                    "type": "Studio",
+                    "address": {
+                        "city": "São Paulo",
+                        "stateCode": "SP",
+                        "neighborhood": "Vila Mariana"
+                    },
+                    "neighbourhood": "Vila Mariana",
+                    "condoIptu": {"condoFee": 450},
+                    "forSale": false,
+                    "title": "Studio na Vila Mariana para alugar",
+                    "citySlug": "sao-paulo-sp-brasil"
+                }
+            ],
+            "search": {"count": 3}
+        }
+    }
+}
