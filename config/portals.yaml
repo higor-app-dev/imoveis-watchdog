@@ -1,0 +1,64 @@
+# config/portals.yaml — Registro central de portais
+#
+# Para adicionar um novo portal:
+#   1. Adicione uma entrada neste arquivo
+#   2. Crie o módulo parser em skills/<portal>/
+#   3. O discovery carrega automaticamente
+#
+# Campos:
+#   name          — valor usado em Imovel.fonte (ex.: "quintoandar", "loft")
+#   display_name  — nome amigável para telas/logs (ex.: "QuintoAndar")
+#   parser_module — caminho do módulo Python relativo à raiz do projeto
+#   base_url      — URL base do portal
+#   enabled       — true = ativo no watchdog, false = ignorado
+#   auth          — opcional: chaves/headers de autenticação
+#   functions     — mapeamento das funções do parser:
+#     parse_listing : (dict) -> Imovel        — converte uma listagem individual
+#     parse_payload : (dict) -> list[Imovel]  — converte payload de busca completa
+#     build_url     : (dict) -> str           — constrói URL de busca
+
+portals:
+  quinto_andar:
+    name: "quintoandar"
+    display_name: "QuintoAndar"
+    parser_module: "skills.quinto_andar.quintoandar_parser"
+    base_url: "https://www.quintoandar.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_quintoandar_listing"
+      parse_payload: "from_quintoandar_payload"
+
+  loft:
+    name: "loft"
+    display_name: "Loft"
+    parser_module: "skills.loft.loft_parser"
+    base_url: "https://www.loft.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_loft_listing"
+      parse_payload: "from_loft_payload"
+
+  emcasa:
+    name: "emcasa"
+    display_name: "EmCasa"
+    parser_module: "skills.emcasa.emcasa_parser"
+    base_url: "https://www.emcasa.com"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_emcasa_hit"
+      parse_payload: "from_emcasa_api_response"
+
+  # Exemplo de terceiro portal (descomente quando implementar)
+  # zap:
+  #   name: "zap"
+  #   display_name: "Zap Imóveis"
+  #   parser_module: "skills.zap.zap_parser"
+  #   base_url: "https://www.zapimoveis.com.br"
+  #   enabled: true
+  #   auth: {}
+  #   functions:
+  #     parse_listing: "from_zap_listing"
+  #     parse_payload: "from_zap_payload"

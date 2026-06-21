@@ -23,6 +23,33 @@ loft:
       preco_max: null
       quartos_min: null
 
+emcasa:
+  compra:
+    - cidade: "São Paulo"
+      uf: "SP"
+      bairros: []
+      tipos: ["apartamento", "casa", "cobertura", "kitnet", "studio"]
+      preco_max: null
+      quartos_min: null
+    - cidade: "Campinas"
+      uf: "SP"
+      bairros: []
+      tipos: ["apartamento", "casa", "cobertura"]
+      preco_max: null
+      quartos_min: null
+    - cidade: "Rio de Janeiro"
+      uf: "RJ"
+      bairros: []
+      tipos: ["apartamento", "casa", "cobertura", "kitnet", "studio"]
+      preco_max: null
+      quartos_min: null
+    - cidade: "Niterói"
+      uf: "RJ"
+      bairros: []
+      tipos: ["apartamento", "casa", "cobertura"]
+      preco_max: null
+      quartos_min: null
+
 # Config geral
 geral:
   intervalo_horas: 6  # a cada 6 horas

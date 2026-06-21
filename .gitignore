@@ -20,12 +20,18 @@ env/
 .DS_Store
 Thumbs.db
 
+# Node
+node_modules/
+scrapers/loft/node_modules/
+scrapers/loft/output/
+
 # Environment
 .env
 .env.local
 
 # Data outputs (version history, not source)
 data/results/
+data/cache/
 *.log
 
 
