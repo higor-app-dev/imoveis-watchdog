@@ -772,12 +772,12 @@ def main():
         print(f"📄 {input_path}: {len(imoveis)} imóveis parseados", file=sys.stderr)
 
     # Validação
-    validos = [i for i in all_imoveis if i.is_valid()]
-    invalidos = [i for i in all_imoveis if not i.is_valid()]
-    if invalidos:
-        print(f"⚠️  {len(invalidos)} imóveis com erros de validação:", file=sys.stderr)
-        for inv in invalidos:
-            print(f"   - {inv.id}: {inv.validate()}", file=sys.stderr)
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent))
+    from validacao import validar_lote, relatorio_resumido
+
+    lote = validar_lote(all_imoveis)
+    print(relatorio_resumido(lote), file=sys.stderr)
 
     # Saída
     indent = 2 if args.pretty else None

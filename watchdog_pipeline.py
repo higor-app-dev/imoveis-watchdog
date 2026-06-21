@@ -472,6 +472,26 @@ def run_pipeline(
                 print(f"    ↪ Filtrado: {len(filtered)} anúncios nos bairros alvo")
                 listings = filtered
 
+            # Validação dos anúncios (converte para schema Imovel, filtra inválidos)
+            try:
+                sys.path.insert(0, str(Path.home() / ".hermes"))
+                from imovel_schema import from_olx_parse
+                sys.path.insert(0, str(Path(__file__).resolve().parent / "skills" / "quinto-andar"))
+                from validacao import validar_lote
+                imoveis_v = [from_olx_parse(a) for a in listings]
+                lote = validar_lote(imoveis_v)
+                if lote.invalidos > 0:
+                    print(f"    ⚠️  {lote.invalidos} anúncios inválidos ignorados:")
+                    for r in lote.resultados:
+                        if not r.valido:
+                            aid = r.imovel.get("id", "?")
+                            for err in r.erros:
+                                print(f"       - [{aid}] {err}")
+                    listings = [a for i, a in enumerate(listings) if lote.resultados[i].valido]
+                    print(f"    ✓ {len(listings)} anúncios válidos após validação")
+            except ImportError:
+                pass  # validação é opcional na pipeline
+
             all_results[key] = {
                 "city": city,
                 "price_label": price_label,
