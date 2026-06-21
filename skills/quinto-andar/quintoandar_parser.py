@@ -18,8 +18,10 @@ Uso:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -27,6 +29,81 @@ from typing import Any, Optional
 # O schema unificado vive em ~/.hermes/imovel_schema.py
 sys.path.insert(0, str(Path.home() / ".hermes"))
 from imovel_schema import Imovel, TIPOS_VALIDOS
+
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+logger = logging.getLogger("quintoandar_parser")
+
+# Sempre loga warnings, mesmo se o módulo chamador não configurar logging
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stderr)
+    _handler.setLevel(logging.WARNING)
+    _handler.setFormatter(logging.Formatter("[quintoandar] %(levelname)s: %(message)s"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.WARNING)
+
+
+def log_warning(msg: str) -> None:
+    """Emite warning via logging E warnings.warn para visibilidade dupla."""
+    logger.warning(msg)
+    warnings.warn(msg, stacklevel=2)
+
+
+# ── Helpers de acesso seguro ──────────────────────────────────────────────────
+
+def _safe_get(obj: Any, *keys: str, default: Any = None) -> Any:
+    """Navega por chaves aninhadas sem crash se obj não for dict ou chave faltar.
+    
+    Exemplo: _safe_get(listing, "address", "city", default="")
+    Retorna obj["address"]["city"] se ambos existirem e obj for dict,
+    senão retorna default.
+    """
+    current = obj
+    for key in keys:
+        if not isinstance(current, dict):
+            log_warning(f"Esperado dict para acessar '{key}', recebeu {type(current).__name__}")
+            return default
+        if key not in current:
+            return default
+        current = current[key]
+    return current
+
+
+def _safe_navigate(payload: dict, *paths: str, default: Any = None) -> Any:
+    """
+    Navega payload tentando múltiplos caminhos alternativos.
+    Retorna o primeiro caminho que existe e não é None/"".
+    
+    Exemplo: _safe_navigate(data, "pageProps.initialState.houses",
+                            "results", "data")
+    Tenta cada caminho em ordem; retorna o primeiro achado.
+    """
+    for path in paths:
+        parts = path.split(".")
+        val = payload
+        ok = True
+        for part in parts:
+            if isinstance(val, dict) and part in val:
+                val = val[part]
+            else:
+                ok = False
+                break
+        if ok and val is not None and val != "":
+            return val
+    return default
+
+
+def _as_str(val: Any, default: str = "") -> str:
+    """Converte valor para string com segurança. Loga se tipo for inesperado."""
+    if val is None:
+        return default
+    if isinstance(val, (str, int, float, bool)):
+        return str(val)
+    if isinstance(val, (list, dict)):
+        log_warning(f"Valor não-string inesperado: {type(val).__name__} = {str(val)[:80]}")
+        return str(val)[:200]
+    return str(val)
 
 
 # ── Constantes ────────────────────────────────────────────────────────────────
@@ -78,24 +155,30 @@ def from_quintoandar_listing(
     Returns:
         Instância de Imovel preenchida.
     """
+    if not isinstance(listing, dict):
+        log_warning(f"from_quintoandar_listing recebeu tipo {type(listing).__name__}, não dict — ignorando")
+        return Imovel()
+
     now = coleta_ts or datetime.now(timezone.utc).isoformat()
 
     # ─ ID — QuintoAndar usa id string ou int
-    raw_id = listing.get("id") or listing.get("listingId") or ""
-    imovel_id = str(raw_id)
+    raw_id = _safe_get(listing, "id") or _safe_get(listing, "listingId") or ""
+    imovel_id = _as_str(raw_id)
+    if not imovel_id:
+        log_warning("Listing sem id nem listingId — ID vazio")
 
     # ─ URL do anúncio
     url = _build_url(listing, build_id)
 
     # ─ Preços
-    sale_price = listing.get("salePrice")
-    rent_price = listing.get("rentPrice")
+    sale_price = _safe_get(listing, "salePrice")
+    rent_price = _safe_get(listing, "rentPrice")
     if sale_price is not None:
-        preco_venda = float(sale_price)
+        preco_venda = _to_float(sale_price)
     else:
         preco_venda = None
     if rent_price is not None:
-        preco_aluguel = float(rent_price)
+        preco_aluguel = _to_float(rent_price)
     else:
         preco_aluguel = None
 
@@ -103,19 +186,31 @@ def from_quintoandar_listing(
     condominio, iptu = _extract_condo_iptu(listing)
 
     # ─ Tipo do imóvel
-    tipo = _map_tipo(listing.get("type", ""))
+    tipo = _map_tipo(_as_str(_safe_get(listing, "type", default="")))
 
     # ─ Endereço
     endereco, bairro, cidade, uf = _extract_address(listing)
 
     # ─ Características
-    area = _to_float(listing.get("area") or listing.get("usableArea") or listing.get("totalArea"))
-    quartos = _to_int(listing.get("bedrooms"))
-    banheiros = _to_int(listing.get("bathrooms"))
-    vagas = _to_int(listing.get("parkingSpots") or listing.get("garageSpots") or listing.get("vacancies"))
+    area = _to_float(
+        _safe_get(listing, "area")
+        or _safe_get(listing, "usableArea")
+        or _safe_get(listing, "totalArea")
+    )
+    quartos = _to_int(_safe_get(listing, "bedrooms"))
+    banheiros = _to_int(_safe_get(listing, "bathrooms"))
+    vagas = _to_int(
+        _safe_get(listing, "parkingSpots")
+        or _safe_get(listing, "garageSpots")
+        or _safe_get(listing, "vacancies")
+    )
 
     # ─ Descrição
-    descricao = listing.get("description") or listing.get("shortSaleDescription") or ""
+    descricao = _as_str(
+        _safe_get(listing, "description")
+        or _safe_get(listing, "shortSaleDescription")
+        or ""
+    )
 
     # ─ Amenities
     amenities = _extract_amenities(listing)
@@ -124,14 +219,22 @@ def from_quintoandar_listing(
     fotos = _extract_photos(listing)
 
     # ─ Título
-    titulo = listing.get("title") or listing.get("shortSaleDescription") or ""
+    titulo = _as_str(
+        _safe_get(listing, "title")
+        or _safe_get(listing, "shortSaleDescription")
+        or ""
+    )
 
     # ─ Data de publicação (se disponível)
-    data_pub = listing.get("publishDate") or listing.get("createdAt") or listing.get("createdAtIso")
+    data_pub = (
+        _safe_get(listing, "publishDate")
+        or _safe_get(listing, "createdAt")
+        or _safe_get(listing, "createdAtIso")
+    )
 
     return Imovel(
-        id=imovel_id,
-        titulo=str(titulo)[:500],
+        id=imovel_id[:200],
+        titulo=titulo[:500],
         url=url,
         fonte=FONTE,
         endereco=endereco,
@@ -147,11 +250,11 @@ def from_quintoandar_listing(
         banheiros=banheiros,
         vagas=vagas,
         tipo=tipo,
-        descricao=str(descricao)[:5000],
+        descricao=descricao[:5000],
         amenities=amenities,
         fotos=fotos,
         data_coleta=now,
-        data_publicacao=str(data_pub) if data_pub else None,
+        data_publicacao=_as_str(data_pub) if data_pub else None,
     )
 
 
@@ -193,14 +296,25 @@ def from_quintoandar_payload(
     Returns:
         Lista de Imovel.
     """
-    # Navega pela estrutura: pageProps → initialState → houses
-    data = payload
-    if "pageProps" in data:
-        data = data["pageProps"]
-    if "initialState" in data:
-        data = data["initialState"]
+    if not isinstance(payload, dict):
+        log_warning(f"from_quintoandar_payload recebeu tipo {type(payload).__name__}, não dict")
+        return []
 
-    houses = data.get("houses") or data.get("results") or data.get("listings") or []
+    # Navega pela estrutura: pageProps → initialState → houses/results/listings
+    houses = _safe_navigate(
+        payload,
+        "pageProps.initialState.houses",
+        "pageProps.initialState.results",
+        "initialState.houses",
+        "houses",
+        "results",
+        "listings",
+        default=[],
+    )
+
+    if not isinstance(houses, list):
+        log_warning(f"Lista de imóveis não é list: {type(houses).__name__}")
+        return []
 
     now = datetime.now(timezone.utc).isoformat()
     return [from_quintoandar_listing(h, build_id=build_id, coleta_ts=now) for h in houses]
@@ -218,17 +332,89 @@ def from_quintoandar_api_response(
     Returns:
         Lista de Imovel.
     """
-    results = response.get("results") or response.get("data") or []
+    if not isinstance(response, dict):
+        log_warning(f"from_quintoandar_api_response recebeu tipo {type(response).__name__}, não dict")
+        return []
+
+    results = _safe_navigate(response, "results", "data", default=[])
+    if not isinstance(results, list):
+        log_warning(f"Results da API não é list: {type(results).__name__}")
+        return []
+
     now = datetime.now(timezone.utc).isoformat()
     return [from_quintoandar_listing(h, coleta_ts=now) for h in results]
+
+
+def from_quintoandar_safe(
+    payload: Any,
+    build_id: str = "",
+) -> list[Imovel]:
+    """
+    Wrapper à prova de crash que aceita qualquer payload e retorna lista de Imovel.
+
+    Tenta automaticamente:
+      1. Next.js data route payload (pageProps → initialState → houses)
+      2. API response (results / data)
+      3. Lista direta de houses
+
+    Em vez de crashar, loga warning e retorna lista vazia.
+
+    Args:
+        payload: Qualquer tipo (dict esperado, mas segura outros).
+        build_id: Build ID do Next.js.
+
+    Returns:
+        Lista de Imovel (nunca lança exceção).
+    """
+    try:
+        if not isinstance(payload, dict):
+            log_warning(f"from_quintoandar_safe recebeu tipo {type(payload).__name__}, não dict")
+            return []
+
+        # Tenta Next.js data route
+        houses = _safe_navigate(
+            payload,
+            "pageProps.initialState.houses",
+            "pageProps.initialState.results",
+            "initialState.houses",
+        )
+        if isinstance(houses, list) and houses:
+            return from_quintoandar_houses(houses, build_id=build_id)
+
+        # Tenta API response
+        results = _safe_navigate(payload, "results", "data")
+        if isinstance(results, list) and results:
+            return from_quintoandar_api_response(payload)
+
+        # Tenta lista direta
+        for key in ("houses", "listings", "results"):
+            val = _safe_get(payload, key)
+            if isinstance(val, list) and val:
+                log_warning(f"Payload reconhecido via campo direto '{key}'")
+                return from_quintoandar_houses(val, build_id=build_id)
+
+        log_warning("Nenhuma estrutura de dados reconhecida no payload")
+        return []
+    except Exception as exc:
+        log_warning(f"Erro inesperado em from_quintoandar_safe: {exc}")
+        return []
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _build_url(listing: dict, build_id: str = "") -> str:
     """Monta URL direta do anúncio no QuintoAndar."""
+    if not isinstance(listing, dict):
+        log_warning(f"_build_url recebeu tipo {type(listing).__name__}, não dict")
+        return ""
+
     # Se já tem URL, usa
-    url = listing.get("url") or listing.get("shareUrl") or listing.get("canonicalUrl") or ""
+    url = _as_str(
+        _safe_get(listing, "url")
+        or _safe_get(listing, "shareUrl")
+        or _safe_get(listing, "canonicalUrl")
+        or ""
+    )
     if url:
         # Garante que começa com http
         if url.startswith("/"):
@@ -238,10 +424,10 @@ def _build_url(listing: dict, build_id: str = "") -> str:
         return url
 
     # Monta a partir do path
-    pid = listing.get("id") or listing.get("listingId") or ""
-    slug = listing.get("slug") or listing.get("urlSlug") or ""
+    pid = _as_str(_safe_get(listing, "id") or _safe_get(listing, "listingId") or "")
+    slug = _as_str(_safe_get(listing, "slug") or _safe_get(listing, "urlSlug") or "")
 
-    city_slug = listing.get("citySlug") or ""
+    city_slug = _as_str(_safe_get(listing, "citySlug") or "")
     if city_slug:
         city_part = city_slug.replace("/", "-")
     else:
@@ -249,10 +435,10 @@ def _build_url(listing: dict, build_id: str = "") -> str:
 
     # Determina compra ou aluguel
     prefix = "comprar"
-    for_sale = listing.get("forSale")
+    for_sale = _safe_get(listing, "forSale")
     if for_sale is False:
         prefix = "alugar"
-    if listing.get("rentPrice") and not listing.get("salePrice"):
+    if _safe_get(listing, "rentPrice") and not _safe_get(listing, "salePrice"):
         prefix = "alugar"
 
     path_parts = [p for p in [prefix, "imovel", city_part] if p]
@@ -265,22 +451,45 @@ def _build_url(listing: dict, build_id: str = "") -> str:
 
 def _extract_condo_iptu(listing: dict) -> tuple[Optional[float], Optional[float]]:
     """Extrai condomínio e IPTU do objeto condoIptu ou campos diretos."""
-    condo_iptu = listing.get("condoIptu") or listing.get("condominiumIptu") or {}
+    if not isinstance(listing, dict):
+        log_warning("_extract_condo_iptu recebeu não-dict")
+        return None, None
+
+    condo_iptu = _safe_get(listing, "condoIptu") or _safe_get(listing, "condominiumIptu") or {}
 
     if isinstance(condo_iptu, dict):
-        condominio = _to_float(condo_iptu.get("condoFee") or condo_iptu.get("condominium") or
-                               condo_iptu.get("condominiumFee") or condo_iptu.get("condominio"))
-        iptu = _to_float(condo_iptu.get("iptu") or condo_iptu.get("propertyTax"))
+        condominio = _to_float(
+            _safe_get(condo_iptu, "condoFee")
+            or _safe_get(condo_iptu, "condominium")
+            or _safe_get(condo_iptu, "condominiumFee")
+            or _safe_get(condo_iptu, "condominio")
+        )
+        iptu = _to_float(
+            _safe_get(condo_iptu, "iptu")
+            or _safe_get(condo_iptu, "propertyTax")
+        )
     else:
+        log_warning(f"condoIptu não é dict: {type(condo_iptu).__name__}")
         condominio = None
         iptu = None
 
     # Fallback: campos diretos no listing
     if condominio is None:
-        condominio = _to_float(listing.get("condoPrice") or listing.get("condoFee") or
-                               listing.get("condominiumFee") or listing.get("condominio"))
+        condominio = _to_float(
+            _safe_get(listing, "condoPrice")
+            or _safe_get(listing, "condoFee")
+            or _safe_get(listing, "condominiumFee")
+            or _safe_get(listing, "condominio")
+        )
+        if condominio is not None:
+            log_warning("condominio vindo de campo direto no listing (fallback)")
     if iptu is None:
-        iptu = _to_float(listing.get("iptu") or listing.get("propertyTax"))
+        iptu = _to_float(
+            _safe_get(listing, "iptu")
+            or _safe_get(listing, "propertyTax")
+        )
+        if iptu is not None:
+            log_warning("iptu vindo de campo direto no listing (fallback)")
 
     return condominio, iptu
 
@@ -293,33 +502,63 @@ def _extract_address(listing: dict) -> tuple[str, str, str, str]:
       - Objeto: { address: "Rua X, 123", city: "São Paulo", ... }
       - Strings diretas: neighbourhood, city, stateCode
     """
-    addr = listing.get("address") or {}
+    if not isinstance(listing, dict):
+        log_warning("_extract_address recebeu não-dict")
+        return "", "", "", ""
+
+    addr_raw = _safe_get(listing, "address")
+    addr = addr_raw if isinstance(addr_raw, dict) else {}
+    if addr_raw is not None and not isinstance(addr_raw, dict) and not isinstance(addr_raw, str):
+        log_warning(f"address tem tipo inesperado: {type(addr_raw).__name__}")
+
     if isinstance(addr, dict):
-        endereco = addr.get("address") or addr.get("street") or addr.get("fullAddress") or ""
+        endereco = _as_str(
+            _safe_get(addr, "address")
+            or _safe_get(addr, "street")
+            or _safe_get(addr, "fullAddress")
+            or ""
+        )
         if not endereco:
-            parts = [addr.get("streetName", ""), addr.get("number", "")]
+            parts = [_as_str(_safe_get(addr, "streetName", default="")),
+                     _as_str(_safe_get(addr, "number", default=""))]
             endereco = " ".join(p for p in parts if p).strip()
-        cidade = addr.get("city", "")
-        uf = addr.get("stateCode") or addr.get("state", "")
+        cidade = _as_str(_safe_get(addr, "city", default=""))
+        uf = _as_str(_safe_get(addr, "stateCode", default="") or _safe_get(addr, "state", default=""))
         if len(uf) > 2:
             uf = ""
         # Bairro vem no addr ou no listing
-        bairro = (addr.get("neighborhood") or addr.get("neighbourhood") or
-                  listing.get("neighbourhood") or listing.get("neighborhood") or "")
-    else:
-        endereco = str(addr) if addr else ""
-        cidade = listing.get("city", "")
-        uf = listing.get("stateCode") or listing.get("uf", "")
+        bairro = _as_str(
+            _safe_get(addr, "neighborhood")
+            or _safe_get(addr, "neighbourhood")
+            or _safe_get(listing, "neighbourhood")
+            or _safe_get(listing, "neighborhood")
+            or ""
+        )
+    elif isinstance(addr_raw, str):
+        endereco = addr_raw
+        cidade = _as_str(_safe_get(listing, "city", default=""))
+        uf = _as_str(_safe_get(listing, "stateCode", default="") or _safe_get(listing, "uf", default=""))
         if len(uf) > 2:
             uf = ""
-        bairro = listing.get("neighbourhood") or listing.get("neighborhood") or ""
+        bairro = _as_str(
+            _safe_get(listing, "neighbourhood")
+            or _safe_get(listing, "neighborhood")
+            or ""
+        )
+    else:
+        endereco = ""
+        cidade = _as_str(_safe_get(listing, "city", default=""))
+        uf = _as_str(_safe_get(listing, "stateCode", default="") or _safe_get(listing, "uf", default=""))
+        if len(uf) > 2:
+            uf = ""
+        bairro = ""
 
     # Fallback: regionName (pode ser o bairro também)
     if not bairro:
-        bairro = listing.get("regionName", "")
+        bairro = _as_str(_safe_get(listing, "regionName", default=""))
     # Cidade fallback: extrair do citySlug se disponível (ex: "sao-paulo-sp-brasil")
     if not cidade:
-        city_slug = listing.get("citySlug", "")
+        city_slug = _as_str(_safe_get(listing, "citySlug", default=""))
         if city_slug:
             parts = city_slug.split("-")
             # Últimos 2 são o estado + "brasil"
@@ -328,12 +567,12 @@ def _extract_address(listing: dict) -> tuple[str, str, str, str]:
 
     # UF fallback: extrair do citySlug se tiver (ex: "sao-paulo-sp-brasil")
     if not uf:
-        city_slug = listing.get("citySlug", "")
+        city_slug = _as_str(_safe_get(listing, "citySlug", default=""))
         parts = city_slug.split("-")
         if len(parts) >= 2:
             uf = parts[-2].upper() if len(parts[-2]) == 2 else ""
-        if not uf and listing.get("uf"):
-            uf = listing.get("uf", "")
+        if not uf:
+            uf = _as_str(_safe_get(listing, "uf", default=""))
 
     return endereco, bairro, cidade, uf.upper()
 
@@ -366,27 +605,45 @@ def _map_tipo(raw_type: str) -> str:
 
 def _extract_amenities(listing: dict) -> list[str]:
     """Extrai lista de amenities do listing."""
-    amenities = listing.get("amenities") or listing.get("amenitiesList") or listing.get("features") or []
+    if not isinstance(listing, dict):
+        log_warning("_extract_amenities recebeu não-dict")
+        return []
+
+    amenities = (
+        _safe_get(listing, "amenities")
+        or _safe_get(listing, "amenitiesList")
+        or _safe_get(listing, "features")
+        or []
+    )
 
     if isinstance(amenities, list):
         result = []
         for a in amenities:
             if isinstance(a, dict):
-                a = a.get("name") or a.get("label") or a.get("value") or str(a)
+                a = _safe_get(a, "name") or _safe_get(a, "label") or _safe_get(a, "value") or str(a)
             if isinstance(a, str) and a.strip():
                 result.append(_normalize_amenity(a.strip()))
-            elif isinstance(a, str):
+            elif not isinstance(a, str):
+                log_warning(f"Amenity com tipo inesperado: {type(a).__name__}")
                 continue
         return result
 
     if isinstance(amenities, str):
-        return [_normalize_amenity(a.strip()) for a in amenities.split(",") if a.strip()]
+        tokens = [a.strip() for a in amenities.split(",") if a.strip()]
+        if tokens:
+            log_warning("Amenities em formato string (não-list) — convertendo")
+        return [_normalize_amenity(t) for t in tokens]
 
+    if amenities:
+        log_warning(f"Amenities em formato inesperado: {type(amenities).__name__}")
     return []
 
 
 def _normalize_amenity(name: str) -> str:
     """Normaliza nome de amenity para snake_case (sem acentos)."""
+    if not isinstance(name, str):
+        log_warning(f"_normalize_amenity recebeu tipo {type(name).__name__}, não str")
+        return str(name) if name else ""
     import unicodedata
     name = name.lower().strip()
     # Decompor acentos: "são" → "sa\u0303o"
@@ -400,24 +657,40 @@ def _normalize_amenity(name: str) -> str:
 
 def _extract_photos(listing: dict) -> list[str]:
     """Extrai lista de URLs de fotos."""
-    photos = listing.get("photos") or listing.get("images") or listing.get("photoUrls") or listing.get("pictures") or []
+    if not isinstance(listing, dict):
+        log_warning("_extract_photos recebeu não-dict")
+        return []
+
+    photos = (
+        _safe_get(listing, "photos")
+        or _safe_get(listing, "images")
+        or _safe_get(listing, "photoUrls")
+        or _safe_get(listing, "pictures")
+        or []
+    )
 
     urls = []
     if isinstance(photos, list):
         for p in photos:
             if isinstance(p, dict):
-                url = (p.get("url") or p.get("src") or p.get("image") or
-                       p.get("largeUrl") or p.get("mediumUrl") or p.get("smallUrl"))
-                if url:
+                url = (
+                    _safe_get(p, "url")
+                    or _safe_get(p, "src")
+                    or _safe_get(p, "image")
+                    or _safe_get(p, "largeUrl")
+                    or _safe_get(p, "mediumUrl")
+                    or _safe_get(p, "smallUrl")
+                )
+                if url and isinstance(url, str):
                     urls.append(url)
             elif isinstance(p, str) and p.startswith("http"):
                 urls.append(p)
 
     # Também pode vir como campo url direto
-    main_photo = listing.get("mainPhoto") or listing.get("coverPhoto") or listing.get("thumbnail")
+    main_photo = _safe_get(listing, "mainPhoto") or _safe_get(listing, "coverPhoto") or _safe_get(listing, "thumbnail")
     if isinstance(main_photo, dict):
-        url = main_photo.get("url") or main_photo.get("src")
-        if url and url not in urls:
+        url = _safe_get(main_photo, "url") or _safe_get(main_photo, "src")
+        if url and isinstance(url, str) and url not in urls:
             urls.insert(0, url)
     elif isinstance(main_photo, str) and main_photo.startswith("http") and main_photo not in urls:
         urls.insert(0, main_photo)
@@ -455,6 +728,8 @@ def process_file(
     """
     Lê um arquivo JSON do QuintoAndar e retorna lista de Imovel.
 
+    Nunca lança exceção — loga warning e retorna lista vazia em caso de erro.
+
     Args:
         path: Caminho do arquivo JSON (Next.js data route ou API response).
         build_id: Build ID opcional.
@@ -463,13 +738,18 @@ def process_file(
     Returns:
         Lista de Imovel.
     """
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError) as exc:
+        log_warning(f"Erro ao ler arquivo '{path}': {exc}")
+        return []
 
-    imoveis = from_quintoandar_payload(data, build_id=build_id)
+    imoveis = from_quintoandar_safe(data, build_id=build_id)
 
-    if output:
+    if output and imoveis:
         _save_json(imoveis, output)
+        log_warning(f"Salvo {len(imoveis)} imóveis em {output}")
 
     return imoveis
 
