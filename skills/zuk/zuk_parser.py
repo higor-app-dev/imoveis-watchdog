@@ -423,7 +423,21 @@ def _extract_card_prices(card: Tag) -> dict[str, Any]:
     price_elements = card.select(".card-property-price-value")
     prices = []
     for el in price_elements:
-        text = el.get_text(strip=True)
+        # Get only the element's direct text, excluding child elements
+        # (the percent badge is nested inside the price element)
+        direct_text = ""
+        for child in el.children:
+            if isinstance(child, str):
+                direct_text += child.strip()
+            elif child.name == "span" and "card-property-price-percent" in child.get("class", []):
+                continue  # skip the percentage badge
+            else:
+                # If it's not the percent badge, get its text too
+                if not isinstance(child, str):
+                    child_text = child.get_text(strip=True)
+                    if child_text:
+                        direct_text += " " + child_text
+        text = direct_text.strip()
         price = _parse_br_price(text)
         if price:
             style = el.get("style", "") or ""
