@@ -190,6 +190,64 @@ def from_loft_listing(raw: dict) -> dict | Any | None:
         if src_key in raw:
             mapped[dst_key] = raw[src_key]
 
+    # ── Secondary field mapping (web_extract / API format) ──────────────
+    # Also handles direct keys when not nested in an address object
+    ALT_FIELDS = {
+        "title": "titulo",
+        "description": "descricao",
+        "salePrice": "preco_venda",
+        "rentPrice": "preco_aluguel",
+        "condominiumFee": "condominio",
+        "propertyTax": "iptu",
+        "bedrooms": "quartos",
+        "bathrooms": "banheiros",
+        "parkingSpots": "vagas",
+        "publishDate": "data_publicacao",
+        "disponivel": "disponivel",
+        "neighborhood": "bairro",
+        "city": "cidade",
+        "stateCode": "uf",
+    }
+    for src_key, dst_key in ALT_FIELDS.items():
+        if src_key in raw and src_key not in mapped:
+            mapped[dst_key] = raw[src_key]
+
+    # Handle address dict (nested)
+    address = raw.get("address", {})
+    if isinstance(address, dict):
+        ADDR_MAP = {
+            "street": "endereco",
+            "neighborhood": "bairro",
+            "city": "cidade",
+            "stateCode": "uf",
+        }
+        for src_key, dst_key in ADDR_MAP.items():
+            if src_key in address and dst_key not in mapped:
+                mapped[dst_key] = address[src_key]
+
+    # Handle area (field exists in both formats, may have been mapped already)
+    if "area" in raw and "area" not in mapped:
+        mapped["area"] = raw["area"]
+
+    # Handle type → tipo with normalization (from "type" key)
+    if "type" in raw:
+        raw_tipo = str(raw["type"]).strip().lower()
+        if raw_tipo:
+            mapped["tipo"] = raw_tipo
+
+    # Normalize tipo (in case it came from FIELD_MAP uppercase)
+    if "tipo" in mapped and isinstance(mapped["tipo"], str):
+        mapped["tipo"] = mapped["tipo"].strip().lower()
+
+    # Handle amenities
+    if "amenities" in raw and "amenities" not in mapped:
+        mapped["amenities"] = raw["amenities"]
+
+    # Normalize disponivel: string "true"/"false" or int 1/0 -> bool
+    if "disponivel" in mapped and not isinstance(mapped["disponivel"], bool):
+        v = str(mapped["disponivel"]).strip().lower()
+        mapped["disponivel"] = v in ("true", "1", "yes")
+
     # ── Photo URL normalization ──────────────────────────────────────────
     # Collect, normalize and deduplicate photo URLs from all sources
     # (photos[], imagens[], mainPhoto, coverPhoto)
@@ -257,7 +315,13 @@ def from_loft_payload(raw: Any) -> list[dict]:
 
     # Aceitar dict com "listings" (formato do raw API response)
     if isinstance(raw, dict):
-        raw = raw.get("listings", raw)
+        # Try nested payloads: pageProps → listings, data → listings, or direct listings
+        if "pageProps" in raw and isinstance(raw["pageProps"], dict):
+            raw = raw["pageProps"].get("listings", raw)
+        elif "data" in raw and isinstance(raw["data"], dict):
+            raw = raw["data"].get("listings", raw)
+        else:
+            raw = raw.get("listings", raw)
 
     if not isinstance(raw, list):
         logger.warning(f"Payload inesperado: esperava list, recebeu {type(raw).__name__}")
