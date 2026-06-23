@@ -227,12 +227,16 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
     conditions.push("id = ?");
     args.push(filters.id);
   }
+  if (filters.busca_id !== undefined) {
+    conditions.push("i.id IN (SELECT imovel_id FROM imovel_busca WHERE busca_id = ?)");
+    args.push(filters.busca_id);
+  }
   if (filters.fontes && filters.fontes.length > 0) {
     const placeholders = filters.fontes.map(() => "?").join(",");
-    conditions.push(`fonte IN (${placeholders})`);
+    conditions.push(`i.fonte IN (${placeholders})`);
     args.push(...filters.fontes);
   } else if (filters.fonte) {
-    conditions.push("fonte = ?");
+    conditions.push("i.fonte = ?");
     args.push(filters.fonte);
   }
 
@@ -252,9 +256,9 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
   const orderDir = sortOrder === "asc" ? "ASC" : "DESC";
 
   const [countRows, dataRows] = await Promise.all([
-    query(`SELECT COUNT(*) as total FROM imoveis_watchdog ${where}`, args),
+    query(`SELECT COUNT(*) as total FROM imoveis_watchdog i ${where}`, args),
     query(
-      `SELECT * FROM imoveis_watchdog ${where} ORDER BY ${orderCol} ${orderDir} LIMIT ? OFFSET ?`,
+      `SELECT i.* FROM imoveis_watchdog i ${where} ORDER BY ${orderCol} ${orderDir} LIMIT ? OFFSET ?`,
       [...args, limit, offset]
     ),
   ]);
@@ -293,8 +297,17 @@ export async function getDistinctFontes(): Promise<string[]> {
 }
 
 export async function listBuscasComResultados(): Promise<(Busca & { resultado_count: number })[]> {
-  const totalRows = await query("SELECT COUNT(*) as total FROM imoveis_watchdog");
-  const total = Number(totalRows[0].total ?? 0);
   const buscas = await listBuscas();
-  return buscas.map((b) => ({ ...b, resultado_count: total }));
+  if (buscas.length === 0) return [];
+
+  // Count per busca in a single query
+  const rows = await query(
+    `SELECT busca_id, COUNT(*) as total FROM imovel_busca GROUP BY busca_id`
+  );
+  const counts: Record<number, number> = {};
+  for (const r of rows) {
+    counts[Number(r.busca_id)] = Number(r.total);
+  }
+
+  return buscas.map((b) => ({ ...b, resultado_count: counts[b.id] ?? 0 }));
 }

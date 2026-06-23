@@ -1,19 +1,19 @@
 "use client";
 
-import { Suspense } from "react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
   Search,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { ImovelCard, formatPrice } from "@/components/ImovelCard";
 import type { ImovelData } from "@/components/ImovelCard";
 import SortBar from "@/components/SortBar";
 import type { SortField, SortOrder } from "@/components/SortBar";
+import InfiniteScroll from "@/components/InfiniteScroll";
+import ProviderFilter from "@/components/ProviderFilter";
+import { useImovelScroll } from "@/hooks/useImovelScroll";
 
 interface Busca {
   id: number;
@@ -67,46 +67,72 @@ function BuscaContent() {
   const id = Number(params.id);
 
   const [busca, setBusca] = useState<Busca | null>(null);
-  const [imoveis, setImoveis] = useState<ImovelData[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const PER_PAGE = 50;
+
+  // Fetch busca metadata separately
+  useEffect(() => {
+    fetch(`/api/buscas/${id}`)
+      .then((r) => r.json())
+      .then((data) => setBusca(data))
+      .catch(console.error);
+  }, [id]);
 
   const sort = (sp.get("sort") as SortField) || "data";
   const order = (sp.get("order") as SortOrder) || "desc";
+  const fontesRaw = sp.get("fontes") || "";
+  const fontes = useMemo(
+    () => fontesRaw.split(",").map((f) => f.trim()).filter(Boolean),
+    [fontesRaw]
+  );
 
-  function buildUrl(s: SortField, o: SortOrder, p: number) {
-    const q = new URLSearchParams();
-    q.set("limit", String(PER_PAGE));
-    q.set("offset", String(p * PER_PAGE));
-    q.set("sort", s);
-    q.set("order", o);
-    return `/api/buscas/${id}/imoveis?${q}`;
-  }
+  const extraParams = useMemo(
+    () => ({
+      sort,
+      order,
+      fontes: fontes.length > 0 ? fontes.join(",") : "",
+    }),
+    [sort, order, fontes]
+  );
 
-  useEffect(() => {
-    setLoading(true);
-    fetch(buildUrl(sort, order, page))
-      .then((r) => r.json())
-      .then((data) => {
-        setBusca(data.busca);
-        setImoveis(data.imoveis);
-        setTotal(data.total);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [id, sort, order, page]);
+  const baseUrl = `/api/buscas/${id}/imoveis`;
+  const { imoveis, total, loading, loadingMore, hasMore, error, loadMore } =
+    useImovelScroll({ baseUrl, perPage: 24, extraParams });
 
   function handleSortChange(newSort: SortField, newOrder: SortOrder) {
-    setPage(0);
     const q = new URLSearchParams(sp.toString());
     q.set("sort", newSort);
     q.set("order", newOrder);
     router.replace(`/busca/${id}?${q}`, { scroll: false });
   }
 
-  const totalPages = Math.ceil(total / PER_PAGE);
+  function handleFontesChange(newFontes: string[]) {
+    const q = new URLSearchParams(sp.toString());
+    if (newFontes.length > 0) {
+      q.set("fontes", newFontes.join(","));
+    } else {
+      q.delete("fontes");
+    }
+    router.replace(`/busca/${id}?${q}`, { scroll: false });
+  }
+
+  if (loading && imoveis.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-pulse text-[var(--muted-foreground)]">Buscando imóveis...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800 p-6 text-center text-sm text-red-700 dark:text-red-300">
+          Erro ao carregar: {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -117,7 +143,10 @@ function BuscaContent() {
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold truncate">{busca?.nome || "Carregando..."}</h1>
-          <p className="text-sm text-[var(--muted-foreground)]">{total} imóveis encontrados</p>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {total} imóveis encontrados
+            {!hasMore && total > 24 && " · Todos carregados"}
+          </p>
         </div>
       </div>
 
@@ -146,17 +175,16 @@ function BuscaContent() {
         </div>
       )}
 
-      {/* Sort Bar */}
-      <div className="mb-4">
-        <SortBar sort={sort} order={order} onChange={handleSortChange} />
+      {/* Sort + Filter Bar */}
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SortBar sort={sort} order={order} onChange={handleSortChange} />
+        </div>
+        <ProviderFilter selected={fontes} onChange={handleFontesChange} />
       </div>
 
       {/* Results */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-pulse text-[var(--muted-foreground)]">Buscando imóveis...</div>
-        </div>
-      ) : imoveis.length === 0 ? (
+      {imoveis.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
           Nenhum imóvel encontrado nesta busca.
         </div>
@@ -168,27 +196,17 @@ function BuscaContent() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 mt-6">
-              <button
-                onClick={() => setPage(Math.max(0, page - 1))}
-                disabled={page === 0}
-                className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm disabled:opacity-40 hover:bg-[var(--muted)] transition-colors"
-              >
-                <ChevronLeft className="size-4" /> Anterior
-              </button>
-              <span className="text-sm text-[var(--muted-foreground)]">
-                Página {page + 1} de {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-                disabled={page >= totalPages - 1}
-                className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm disabled:opacity-40 hover:bg-[var(--muted)] transition-colors"
-              >
-                Próxima <ChevronRight className="size-4" />
-              </button>
-            </div>
+          {!hasMore && total > 24 && (
+            <p className="text-center text-xs text-[var(--muted-foreground)] py-4">
+              Todos os {total} imóveis carregados.
+            </p>
           )}
+
+          <InfiniteScroll
+            onLoadMore={loadMore}
+            hasMore={hasMore}
+            loading={loadingMore}
+          />
         </>
       )}
     </div>

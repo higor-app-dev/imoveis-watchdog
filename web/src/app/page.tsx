@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Home,
   Search,
   Clock,
   ArrowRight,
+  Timer,
 } from "lucide-react";
 import { ImovelCard, formatPrice } from "@/components/ImovelCard";
 import type { ImovelData } from "@/components/ImovelCard";
+import InfiniteScroll from "@/components/InfiniteScroll";
+import ProviderFilter from "@/components/ProviderFilter";
+import { useImovelScroll } from "@/hooks/useImovelScroll";
 
 // --- Types ---
 interface Busca {
@@ -29,18 +34,6 @@ interface Busca {
 }
 
 // --- Helpers ---
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function timeAgo(iso: string | null): string {
   if (!iso) return "Nunca executada";
   const diff = Date.now() - new Date(iso).getTime();
@@ -48,7 +41,7 @@ function timeAgo(iso: string | null): string {
   if (mins < 60) return `há ${mins} min`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
+  const days = Math.floor(hours / 60 / 24);
   return `há ${days}d`;
 }
 
@@ -88,7 +81,7 @@ function BuscaCard({ busca }: { busca: Busca }) {
 
       <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)]">
         <span className="flex items-center gap-1">
-          <Clock className="size-3" />
+          <Timer className="size-3" />
           {timeAgo(busca.ultima_execucao)}
         </span>
         <ArrowRight className="size-4 text-[var(--primary)]" />
@@ -97,31 +90,53 @@ function BuscaCard({ busca }: { busca: Busca }) {
   );
 }
 
-// --- Main Page ---
-export default function HomePage() {
-  const [buscas, setBuscas] = useState<Busca[]>([]);
-  const [recentes, setRecentes] = useState<ImovelData[]>([]);
-  const [loading, setLoading] = useState(true);
+// --- Main Home Page ---
+function HomeContent() {
+  const sp = useSearchParams();
+  const router = useRouter();
 
+  const [buscas, setBuscas] = useState<Busca[]>([]);
+
+  // Fetch buscas (static, no pagination)
   useEffect(() => {
-    Promise.all([
-      fetch("/api/buscas/with-results").then((r) => r.json()),
-      fetch("/api/imoveis/recentes?limit=12").then((r) => r.json()),
-    ])
-      .then(([buscasData, recentesData]) => {
-        setBuscas(buscasData);
-        setRecentes(recentesData.imoveis);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    fetch("/api/buscas/with-results")
+      .then((r) => r.json())
+      .then(setBuscas)
+      .catch(console.error);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center">
-        <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
-      </div>
-    );
+  // Fontes filter from URL
+  const fontesRaw = sp.get("fontes") || "";
+  const fontes = useMemo(
+    () => fontesRaw.split(",").map((f) => f.trim()).filter(Boolean),
+    [fontesRaw]
+  );
+
+  const extraParams = useMemo(
+    () => ({
+      sort: "data",
+      order: "desc",
+      fontes: fontes.length > 0 ? fontes.join(",") : "",
+    }),
+    [fontes]
+  );
+
+  // Infinite scroll for recent imoveis
+  const { imoveis, total, loading, loadingMore, hasMore, error, loadMore } =
+    useImovelScroll({
+      baseUrl: "/api/imoveis",
+      perPage: 24,
+      extraParams,
+    });
+
+  function handleFontesChange(newFontes: string[]) {
+    const q = new URLSearchParams(sp.toString());
+    if (newFontes.length > 0) {
+      q.set("fontes", newFontes.join(","));
+    } else {
+      q.delete("fontes");
+    }
+    router.replace(`/?${q}`, { scroll: false });
   }
 
   return (
@@ -167,21 +182,52 @@ export default function HomePage() {
 
       {/* Recentes Section */}
       <section>
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Clock className="size-5" />
-          Últimos Encontrados
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Clock className="size-5" />
+            Últimos Encontrados
+          </h2>
+        </div>
 
-        {recentes.length === 0 ? (
+        {/* Provider filter */}
+        <div className="mb-4">
+          <ProviderFilter selected={fontes} onChange={handleFontesChange} />
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800 p-4 text-center text-sm text-red-700 dark:text-red-300 mb-4">
+            Erro: {error}
+          </div>
+        )}
+
+        {loading && imoveis.length === 0 ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
+          </div>
+        ) : imoveis.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
-            Nenhum imóvel encontrado ainda.
+            Nenhum imóvel encontrado.
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recentes.map((i) => (
-              <ImovelCard key={i.id} imovel={i} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {imoveis.map((i) => (
+                <ImovelCard key={i.id} imovel={i} />
+              ))}
+            </div>
+
+            {!hasMore && total > 24 && (
+              <p className="text-center text-xs text-[var(--muted-foreground)] py-4">
+                Todos os {total} imóveis carregados.
+              </p>
+            )}
+
+            <InfiniteScroll
+              onLoadMore={loadMore}
+              hasMore={hasMore}
+              loading={loadingMore}
+            />
+          </>
         )}
       </section>
 
@@ -190,5 +236,17 @@ export default function HomePage() {
         Imóveis Watchdog · Dados atualizados pelo pipeline de busca
       </footer>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-dvh items-center justify-center">
+        <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }

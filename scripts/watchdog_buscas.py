@@ -392,6 +392,11 @@ def executar_busca(
         """
         try:
             _turso(sql)
+            # Associa imóvel à busca na tabela de junção
+            _turso(f"""
+                INSERT OR IGNORE INTO imovel_busca (imovel_id, busca_id)
+                VALUES ({esc(list_id)}, {busca_id})
+            """)
             salvos += 1
         except Exception as e:
             logger.warning(f"  ⚠️  Erro salvando {list_id}: {e}")

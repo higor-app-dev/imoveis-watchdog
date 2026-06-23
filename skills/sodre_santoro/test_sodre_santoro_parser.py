@@ -177,11 +177,11 @@ def test_listing_judicial():
     assert imovel["tipo"] == "apartamento"
 
     # URL
-    assert imovel["url"] == f"{DETAIL_BASE}/28679/2763869"
+    assert imovel["url"] == f"{DETAIL_BASE}/leilao/28679/lote/2763869"
 
-    # Preços
-    assert imovel["preco_venda"] == 3558.71  # 355871 cents → R$ 3.558,71
-    assert imovel["preco_anterior"] == 2135.23  # 213523 cents → R$ 2.135,23
+    # Preços (API retorna valores em R$, não centavos)
+    assert imovel["preco_venda"] == 355871.0  # R$ 355.871,00
+    assert imovel["preco_anterior"] == 213523.0  # R$ 213.523,00
 
     # Campos específicos de leilão
     assert imovel["auction_id"] == 28679
@@ -197,9 +197,9 @@ def test_listing_judicial():
     assert all(f.startswith("https://photos.sodresantoro.com.br") for f in imovel["fotos"])
 
     # Valores específicos
-    assert imovel["bid_initial"] == 3558.71
-    assert imovel["bid_actual"] == 3558.71
-    assert imovel["tj_praca_value"] == 2135.23
+    assert imovel["bid_initial"] == 355871.0
+    assert imovel["bid_actual"] == 355871.0
+    assert imovel["tj_praca_value"] == 213523.0
     assert imovel["tj_praca_discount"] == 40
     assert imovel["lot_visits"] == 852
     assert imovel["lot_bids"] is None
@@ -222,7 +222,7 @@ def test_listing_fiscal():
 
     assert imovel["id"] == "sodre_28695_2767231"
     assert imovel["auction_type"] == "fiscal"
-    assert imovel["preco_venda"] == 3830.49  # 383049 cents → R$ 3.830,49
+    assert imovel["preco_venda"] == 383049.0  # R$ 383.049,00
     assert imovel["tj_praca_discount"] == 25
     assert imovel["cidade"] == "guaratinguetá"
     assert imovel["uf"] == "sp"
@@ -252,7 +252,7 @@ def test_listing_terreno_ms():
     assert imovel["uf"] == "ms"
     assert imovel["tipo"] == "lote de terreno"
     assert imovel["bairro"] == "vila esplanada"
-    assert imovel["preco_venda"] == 1090.70  # 109070 cents → R$ 1.090,70
+    assert imovel["preco_venda"] == 109070.0  # R$ 109.070,00
     assert imovel["tj_praca_discount"] == 50
     assert len(imovel["fotos"]) == 1
 
@@ -322,12 +322,12 @@ def test_from_sodre_payload_empty():
 
 
 def test_parse_price():
-    """Conversão de centavos para reais."""
-    assert _parse_price(16233286) == 162332.86
-    assert _parse_price(355871) == 3558.71
-    assert _parse_price(109070) == 1090.70
+    """API retorna valores em R$, não centavos."""
+    assert _parse_price(16233286) == 16233286.0
+    assert _parse_price(355871) == 355871.0
+    assert _parse_price(109070) == 109070.0
     assert _parse_price(0) == 0.0
-    assert _parse_price(100) == 1.0
+    assert _parse_price(100) == 100.0
     assert _parse_price(None) is None
     assert _parse_price("") is None
     assert _parse_price(-100) is None
@@ -551,9 +551,9 @@ def test_image_urls_empty_when_no_photos():
 
 
 def test_build_detail_url():
-    """URL de detalhe construída corretamente."""
+    """URL de detalhe construída corretamente no formato /leilao/{id}/lote/{id}."""
     url = _build_detail_url(28679, 2763869)
-    assert url == f"{DETAIL_BASE}/28679/2763869"
+    assert url == f"{DETAIL_BASE}/leilao/28679/lote/2763869"
     print(f"[PASS] test_build_detail_url: {url}")
 
 

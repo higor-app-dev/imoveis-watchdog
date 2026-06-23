@@ -99,7 +99,7 @@ logger = logging.getLogger("sodre_santoro_parser")
 
 API_BASE = "https://prd-api.sodresantoro.com.br/api/v1/auctions"
 PHOTO_BASE = "https://photos.sodresantoro.com.br"
-DETAIL_BASE = "https://leilao.sodresantoro.com.br"
+DETAIL_BASE = "https://www.sodresantoro.com.br"
 SEGMENT = "imoveis"
 PAGE_SIZE = 20
 
@@ -274,10 +274,13 @@ def _collect_photos(raw_lot: dict) -> list[str]:
 
 
 def _parse_price(cents: Any) -> float | None:
-    """Convert BRL cents to float (R$).
+    """Parse a price value from the Sodré Santoro API.
+
+    The API returns prices in REAIS (R$), not BRL cents.
+    e.g. 208347 → R$ 208.347,00
 
     Args:
-        cents: Integer value in BRL cents (e.g. 16233286 → R$ 162.332,86).
+        cents: Integer/float value in R$.
 
     Returns:
         Float value in R$, or None if invalid.
@@ -288,7 +291,7 @@ def _parse_price(cents: Any) -> float | None:
         val = float(cents)
         if val < 0:
             return None
-        return val / 100.0
+        return val
     except (ValueError, TypeError):
         return None
 
@@ -352,6 +355,10 @@ def _extract_city_state(title: str | None) -> dict:
 def _build_detail_url(auction_id: int | str, lot_id: int | str) -> str:
     """Build the auction detail URL from auction and lot IDs.
 
+    Correct format: /leilao/{auction_id}/lote/{lot_id}
+    (Confirmed: leilao.sodresantoro.com.br redirects to homepage; the API returns
+     leilao.sodresantoro.com.br/{auction_id}/{lot_id} but that's also wrong.)
+
     Args:
         auction_id: The auction ID.
         lot_id: The lot ID.
@@ -359,7 +366,7 @@ def _build_detail_url(auction_id: int | str, lot_id: int | str) -> str:
     Returns:
         Full URL string.
     """
-    return f"{DETAIL_BASE}/{auction_id}/{lot_id}"
+    return f"{DETAIL_BASE}/leilao/{auction_id}/lote/{lot_id}"
 
 
 # ── Type helper ──────────────────────────────────────────────────────────────
