@@ -469,7 +469,9 @@ def _extract_condo_iptu(listing: dict) -> tuple[Optional[float], Optional[float]
             or _safe_get(condo_iptu, "propertyTax")
         )
     else:
-        log_warning(f"condoIptu não é dict: {type(condo_iptu).__name__}")
+        # condoIptu can be an int (total = condominio + iptu directly)
+        # or some other type — log at debug level only
+        logger.debug(f"condoIptu tipo inesperado: {type(condo_iptu).__name__}={condo_iptu}")
         condominio = None
         iptu = None
 
