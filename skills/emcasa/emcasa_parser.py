@@ -195,7 +195,7 @@ def from_emcasa_hit(
         iptu = None
 
     # ─ Área ────────────────────────────────────────────────────────────────
-    area_total = _to_float(d.get("totalArea"))
+    area_total = _to_float(d.get("totalArea") or d.get("property_area_total"))
     area_util = _to_float(d.get("usableArea"))
     area = area_total or area_util
 
@@ -231,7 +231,7 @@ def from_emcasa_hit(
     quartos = _to_int(d.get("bedrooms"))
     banheiros = _to_int(d.get("bathrooms"))
     vagas = None
-    for key in ("parkingSpots", "property_parking_spots", "garageSpots"):
+    for key in ("parkingSpots", "property_parking_spots", "garageSpots", "parkingSpaces"):
         if key in d and d[key] is not None:
             vagas = _to_int(d[key])
             break

@@ -301,8 +301,9 @@ def executar_busca(
         tipo = item.get("tipo", item.get("type", ""))
         modalidade = busca.get("modalidades", '["compra"]')
 
-        preco_venda = item.get("preco_venda", item.get("salePrice"))
-        preco_aluguel = item.get("preco_aluguel", item.get("rentPrice"))
+        # ─ Preços: fallback para campos do crawl bruto ─
+        preco_venda = item.get("askingPrice", item.get("price", item.get("preco_venda", item.get("salePrice"))))
+        preco_aluguel = item.get("preco_aluguel", item.get("rentPrice", item.get("rentalPrice")))
         condominio = item.get("condominio", item.get("condoFee"))
         iptu = item.get("iptu", item.get("propertyTax"))
         area = item.get("area", item.get("area_m2", item.get("usableArea", item.get("property_area_total"))))
@@ -310,6 +311,39 @@ def executar_busca(
         banheiros = item.get("banheiros", item.get("bathrooms"))
         vagas = item.get("vagas", item.get("vagas_garagem", item.get("parkingSpots", item.get("parkingSpaces"))))
         descricao = item.get("descricao", item.get("description", ""))
+
+        # ─ Foto: primeira URL da lista de fotos ─
+        fotos_raw = item.get("fotos", item.get("photos", item.get("images", item.get("imageUrls", []))))
+        foto_url = ""
+        if isinstance(fotos_raw, list) and len(fotos_raw) > 0:
+            first = fotos_raw[0]
+            if isinstance(first, dict):
+                foto_url = first.get("url", "")
+            elif isinstance(first, str) and first.startswith("http"):
+                foto_url = first
+        elif isinstance(fotos_raw, str) and fotos_raw.startswith("http"):
+            foto_url = fotos_raw
+        if not foto_url:
+            primary = item.get("primaryImageUrl", item.get("photo", item.get("image", "")))
+            if primary and isinstance(primary, str) and primary.startswith("http"):
+                foto_url = primary
+
+        # ─ Coordenadas ─
+        latitude, longitude = None, None
+        coords = item.get("coordinates")
+        # Also check _extra (emcasa parser stores coords there)
+        if not coords:
+            extra = item.get("_extra", {})
+            if isinstance(extra, dict):
+                coords = extra.get("coordinates")
+        if isinstance(coords, dict):
+            latitude = coords.get("lat", coords.get("latitude"))
+            longitude = coords.get("lng", coords.get("longitude"))
+        elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
+            latitude, longitude = coords[0], coords[1]
+        elif item.get("latitude") and item.get("longitude"):
+            latitude = item.get("latitude")
+            longitude = item.get("longitude")
 
         # Escapa aspas simples no SQL
         def esc(s):
@@ -325,12 +359,13 @@ def executar_busca(
         sql = f"""
         INSERT INTO imoveis_watchdog (id, titulo, fonte, url, endereco, bairro, cidade, uf,
             tipo, preco_venda, preco_aluguel, condominio, iptu, area_m2, quartos, banheiros,
-            vagas, descricao, data_ultima_vista, removido)
+            vagas, descricao, foto_url, latitude, longitude, data_ultima_vista, removido)
         VALUES ({esc(list_id)}, {esc(titulo)}, {esc(fonte)}, {esc(url)}, {esc(endereco)},
             {esc(bairro)}, {esc(cidade)}, {esc(uf)}, {esc(tipo)},
             {esc_null(preco_venda)}, {esc_null(preco_aluguel)}, {esc_null(condominio)},
             {esc_null(iptu)}, {esc_null(area)}, {esc_null(quartos)},
             {esc_null(banheiros)}, {esc_null(vagas)}, {esc(descricao)},
+            {esc(foto_url)}, {esc_null(latitude)}, {esc_null(longitude)},
             datetime('now'), 0)
         ON CONFLICT(id) DO UPDATE SET
             data_ultima_vista=datetime('now'),
@@ -338,6 +373,9 @@ def executar_busca(
             preco_aluguel=COALESCE(excluded.preco_aluguel, preco_aluguel),
             condominio=COALESCE(excluded.condominio, condominio),
             iptu=COALESCE(excluded.iptu, iptu),
+            foto_url=COALESCE(excluded.foto_url, foto_url),
+            latitude=COALESCE(excluded.latitude, latitude),
+            longitude=COALESCE(excluded.longitude, longitude),
             removido=0
         """
         try:

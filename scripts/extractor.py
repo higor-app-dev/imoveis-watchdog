@@ -553,6 +553,56 @@ def _extract_leilao_live(portal_slug: str, target: dict) -> list[dict]:
     return []
 
 
+def _parse_pre_coletados(portal_slug: str, raw_listings: list[dict]) -> list[dict]:
+    """Tenta parsear dados brutos do crawl pelo parser do portal (portal_registry).
+
+    Se o portal tiver uma função 'parse_listing' registrada, aplica a cada item.
+    Retorna lista parseada, ou a lista original se o parser não estiver disponível.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "skills"))
+        from portal_registry import from_listing, get_portal, invalidate_cache
+
+        portal = get_portal(portal_slug)
+        if not portal.can_parse_listing:
+            return raw_listings  # sem parser, retorna bruto
+
+        parsed = []
+        errors = 0
+        for raw in raw_listings:
+            try:
+                imovel = from_listing(portal_slug, raw)
+                if imovel and hasattr(imovel, "to_dict"):
+                    d = imovel.to_dict()
+                    # Preserva _extra se existir
+                    extra = getattr(imovel, "_extra", {})
+                    if extra:
+                        d["_extra"] = extra
+                    parsed.append(d)
+                elif imovel and isinstance(imovel, dict):
+                    parsed.append(imovel)
+                # Se for None/Falsy, ignora (parser retornou vazio)
+            except Exception:
+                errors += 1
+                continue
+
+        if errors > 0 and not parsed:
+            logger.warning(f"  {portal_slug}: {errors} erros parseando dados brutos, retornando brutos")
+            return raw_listings
+
+        if errors > 0:
+            logger.debug(f"  {portal_slug}: {errors}/{len(raw_listings)} erros ignorados no parse")
+
+        if parsed:
+            return parsed
+        return raw_listings
+
+    except ImportError:
+        return raw_listings  # portal_registry não disponível
+    except Exception:
+        return raw_listings  # qualquer outro erro, retorna bruto
+
+
 def extract_portal(
     portal_slug: str,
     target: dict,
@@ -582,6 +632,14 @@ def extract_portal(
     pre_coletados = _load_pre_coletados(portal_slug)
     if pre_coletados:
         logger.info(f"  {portal_slug}: {len(pre_coletados)} listings pré-coletados")
+        # Tenta parsear dados brutos pelo parser do portal (se disponível)
+        try:
+            parsed = _parse_pre_coletados(portal_slug, pre_coletados)
+            if parsed and parsed is not pre_coletados:
+                logger.info(f"  {portal_slug}: {len(parsed)} listings parseados via portal_registry")
+                return parsed
+        except Exception:
+            logger.debug(f"  {portal_slug}: parser não disponível para pre-coletados, retornando brutos")
         return pre_coletados
 
     # Tenta usar o parser do portal com sample data
