@@ -291,6 +291,7 @@ def executar_busca(
     # 4. Salvar no Turso (imoveis_watchdog)
     print(f"\n💾 Salvando {len(filtrados)} imóveis no Turso...")
     salvos = 0
+    saved_ids: set[str] = set()
     for item in filtrados:
         # Gera ID único: se não existir, cria hash composto
         list_id = str(item.get("id", item.get("list_id", "")))
@@ -390,6 +391,7 @@ def executar_busca(
                 VALUES ({esc(list_id)}, {busca_id})
             """)
             salvos += 1
+            saved_ids.add(list_id)
         except Exception as e:
             logger.warning(f"  ⚠️  Erro salvando {list_id}: {e}")
 
@@ -398,7 +400,7 @@ def executar_busca(
     # 5. Atualizar metadados da busca
     _turso(f"""
         UPDATE buscas_watchdog
-        SET ultima_execucao=datetime('now'), ultimo_total={salvos}
+        SET ultima_execucao=datetime('now'), ultimo_total={len(saved_ids)}
         WHERE id={busca_id}
     """)
 
