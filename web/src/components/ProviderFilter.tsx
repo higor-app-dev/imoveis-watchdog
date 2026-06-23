@@ -9,19 +9,25 @@ interface ProviderFilterProps {
   selected: string[];
   /** Called when selection changes */
   onChange: (fontes: string[]) => void;
+  /** Optional busca ID — when set, only shows fontes available in that busca */
+  buscaId?: number;
 }
 
-export default function ProviderFilter({ selected, onChange }: ProviderFilterProps) {
+export default function ProviderFilter({ selected, onChange, buscaId }: ProviderFilterProps) {
   const [allFontes, setAllFontes] = useState<string[]>([]);
   const [loadingFontes, setLoadingFontes] = useState(true);
 
   useEffect(() => {
-    fetch("/api/imoveis/fontes")
+    setLoadingFontes(true);
+    const url = buscaId
+      ? `/api/imoveis/fontes?busca_id=${buscaId}`
+      : "/api/imoveis/fontes";
+    fetch(url)
       .then((r) => r.json())
       .then((data: string[]) => setAllFontes(data))
       .catch(console.error)
       .finally(() => setLoadingFontes(false));
-  }, []);
+  }, [buscaId]);
 
   const toggleFonte = useCallback(
     (fonte: string) => {

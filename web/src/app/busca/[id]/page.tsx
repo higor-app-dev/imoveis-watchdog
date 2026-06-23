@@ -180,7 +180,7 @@ function BuscaContent() {
         <div className="flex flex-wrap items-center gap-3">
           <SortBar sort={sort} order={order} onChange={handleSortChange} />
         </div>
-        <ProviderFilter selected={fontes} onChange={handleFontesChange} />
+        <ProviderFilter selected={fontes} onChange={handleFontesChange} buscaId={id} />
       </div>
 
       {/* Results */}

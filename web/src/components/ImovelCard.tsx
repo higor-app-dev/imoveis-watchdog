@@ -34,7 +34,9 @@ export interface ImovelData {
   vagas: number | null;
   descricao: string | null;
   data_primeira_vista: string | null;
+  data_ultima_vista: string | null;
   foto_url: string | null;
+  fotos: string | null;
   latitude: number | null;
   longitude: number | null;
 }

@@ -40,6 +40,7 @@ export interface Imovel {
   data_ultima_vista: string | null;
   data_primeira_vista: string | null;
   foto_url: string | null;
+  fotos: string | null;
   latitude: number | null;
   longitude: number | null;
 }
@@ -145,6 +146,7 @@ function toImovel(r: Row): Imovel {
     data_ultima_vista: (r.data_ultima_vista as string | null) ?? null,
     data_primeira_vista: (r.data_primeira_vista as string | null) ?? null,
     foto_url: (r.foto_url as string | null) ?? null,
+    fotos: (r.fotos as string | null) ?? null,
     latitude: (r.latitude as number | null) ?? null,
     longitude: (r.longitude as number | null) ?? null,
   };
@@ -292,6 +294,18 @@ export async function getDistinctTipos(): Promise<string[]> {
 export async function getDistinctFontes(): Promise<string[]> {
   const rows = await query(
     "SELECT DISTINCT fonte FROM imoveis_watchdog WHERE fonte IS NOT NULL AND fonte != '' ORDER BY fonte"
+  );
+  return rows.map((r) => String(r.fonte ?? ""));
+}
+
+export async function getDistinctFontesPorBusca(buscaId: number): Promise<string[]> {
+  const rows = await query(
+    `SELECT DISTINCT i.fonte
+     FROM imoveis_watchdog i
+     JOIN imovel_busca ib ON i.id = ib.imovel_id
+     WHERE ib.busca_id = ? AND i.fonte IS NOT NULL AND i.fonte != ''
+     ORDER BY i.fonte`,
+    [buscaId]
   );
   return rows.map((r) => String(r.fonte ?? ""));
 }

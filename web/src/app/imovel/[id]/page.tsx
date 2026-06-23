@@ -20,6 +20,9 @@ import {
   Hash,
   Globe,
   ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Grid3X3,
 } from "lucide-react";
 import type { ImovelData } from "@/components/ImovelCard";
 import { formatPrice, formatDate } from "@/components/ImovelCard";
@@ -44,12 +47,82 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
   );
 }
 
+function ImageSlider({ images, title }: { images: string[]; title: string }) {
+  const [current, setCurrent] = useState(0);
+  const total = images.length;
+
+  const prev = () => setCurrent((c) => (c - 1 + total) % total);
+  const next = () => setCurrent((c) => (c + 1) % total);
+
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center aspect-[16/10] text-[var(--muted-foreground)]">
+        <ImageIcon className="size-16 mb-2 opacity-30" />
+        <span className="text-sm">Sem foto disponível</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative aspect-[16/10] bg-[var(--muted)] overflow-hidden group">
+      {/* Current image */}
+      <img
+        src={images[current]}
+        alt={`${title} - foto ${current + 1}`}
+        className="size-full object-cover transition-opacity duration-300"
+      />
+
+      {/* Counter badge */}
+      <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm">
+        {current + 1} / {total}
+      </div>
+
+      {/* Nav arrows */}
+      {total > 1 && (
+        <>
+          <button
+            onClick={prev}
+            className="absolute left-2 top-1/2 -translate-y-1/2 size-9 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all backdrop-blur-sm"
+            aria-label="Foto anterior"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-2 top-1/2 -translate-y-1/2 size-9 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all backdrop-blur-sm"
+            aria-label="Próxima foto"
+          >
+            <ChevronRight className="size-5" />
+          </button>
+        </>
+      )}
+
+      {/* Thumbnail dots */}
+      {total > 1 && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              className={`size-2 rounded-full transition-all ${
+                i === current
+                  ? "bg-white scale-110"
+                  : "bg-white/40 hover:bg-white/60"
+              }`}
+              aria-label={`Foto ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ImovelDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(params.id as string);
   const [imovel, setImovel] = useState<ImovelData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [imgError, setImgError] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
   useEffect(() => {
@@ -62,6 +135,18 @@ export default function ImovelDetailPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Build image list from fotos JSON or fall back to foto_url
+  const images: string[] = (() => {
+    if (!imovel) return [];
+    if (imovel.fotos) {
+      try {
+        const parsed = JSON.parse(imovel.fotos);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return imovel.foto_url ? [imovel.foto_url] : [];
+  })();
 
   if (loading) {
     return (
@@ -83,7 +168,6 @@ export default function ImovelDetailPage() {
   }
 
   const title = imovel.titulo || `${imovel.bairro}${imovel.cidade ? `, ${imovel.cidade}` : ""}`;
-  const images = imovel.foto_url ? [imovel.foto_url] : [];
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -98,27 +182,20 @@ export default function ImovelDetailPage() {
       <div className="grid gap-8 lg:grid-cols-5">
         {/* Image Gallery */}
         <div className="lg:col-span-3">
-          <div className="rounded-xl overflow-hidden bg-[var(--muted)] border border-[var(--border)]">
-            {images.length > 0 ? (
-              <div className="space-y-2">
-                {images.map((url, i) => (
-                  <div key={i} className="relative aspect-[16/10]">
-                    <img
-                      src={url}
-                      alt={`${title} - foto ${i + 1}`}
-                      className="size-full object-cover"
-                      onError={() => setImgError(true)}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center aspect-[16/10] text-[var(--muted-foreground)]">
-                <ImageIcon className="size-16 mb-2 opacity-30" />
-                <span className="text-sm">Sem foto disponível</span>
-              </div>
-            )}
+          <div className="rounded-xl overflow-hidden border border-[var(--border)]">
+            <ImageSlider images={images} title={title} />
           </div>
+
+          {/* Gallery button */}
+          {images.length > 1 && (
+            <Link
+              href={`/imovel/${encodeURIComponent(id)}/galeria`}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm text-[var(--primary)] hover:underline"
+            >
+              <Grid3X3 className="size-4" />
+              Ver todas as {images.length} fotos
+            </Link>
+          )}
 
           {/* Map */}
           {imovel.latitude && imovel.longitude && (

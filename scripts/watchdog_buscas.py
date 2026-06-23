@@ -324,21 +324,30 @@ def executar_busca(
         vagas = item.get("vagas", item.get("vagas_garagem", item.get("parkingSpots", item.get("parkingSpaces"))))
         descricao = item.get("descricao", item.get("description", ""))
 
-        # ─ Foto: primeira URL da lista de fotos ─
+        # ─ Fotos: extrai todas as URLs e salva como JSON ─
         fotos_raw = item.get("fotos", item.get("photos", item.get("images", item.get("imageUrls", []))))
-        foto_url = ""
+        all_urls: list[str] = []
         if isinstance(fotos_raw, list) and len(fotos_raw) > 0:
-            first = fotos_raw[0]
-            if isinstance(first, dict):
-                foto_url = first.get("url", "")
-            elif isinstance(first, str) and first.startswith("http"):
-                foto_url = first
+            for f in fotos_raw:
+                if isinstance(f, dict):
+                    url = f.get("url", "")
+                    if url and isinstance(url, str) and url.startswith("http"):
+                        all_urls.append(url)
+                elif isinstance(f, str) and f.startswith("http"):
+                    all_urls.append(f)
         elif isinstance(fotos_raw, str) and fotos_raw.startswith("http"):
-            foto_url = fotos_raw
-        if not foto_url:
-            primary = item.get("primaryImageUrl", item.get("photo", item.get("image", "")))
-            if primary and isinstance(primary, str) and primary.startswith("http"):
-                foto_url = primary
+            all_urls.append(fotos_raw)
+
+        # Fallback: campos de foto única
+        if not all_urls:
+            for campo in ("primaryImageUrl", "photo", "image"):
+                val = item.get(campo, "")
+                if val and isinstance(val, str) and val.startswith("http"):
+                    all_urls.append(val)
+                    break
+
+        foto_url = all_urls[0] if all_urls else ""
+        fotos_json = json.dumps(all_urls)
 
         # ─ Coordenadas ─
         latitude, longitude = None, None
@@ -368,28 +377,7 @@ def executar_busca(
                 return "NULL"
             return str(v)
 
-        sql = f"""
-        INSERT INTO imoveis_watchdog (id, titulo, fonte, url, endereco, bairro, cidade, uf,
-            tipo, preco_venda, preco_aluguel, condominio, iptu, area_m2, quartos, banheiros,
-            vagas, descricao, foto_url, latitude, longitude, data_ultima_vista, removido)
-        VALUES ({esc(list_id)}, {esc(titulo)}, {esc(fonte)}, {esc(url)}, {esc(endereco)},
-            {esc(bairro)}, {esc(cidade)}, {esc(uf)}, {esc(tipo)},
-            {esc_null(preco_venda)}, {esc_null(preco_aluguel)}, {esc_null(condominio)},
-            {esc_null(iptu)}, {esc_null(area)}, {esc_null(quartos)},
-            {esc_null(banheiros)}, {esc_null(vagas)}, {esc(descricao)},
-            {esc(foto_url)}, {esc_null(latitude)}, {esc_null(longitude)},
-            datetime('now'), 0)
-        ON CONFLICT(id) DO UPDATE SET
-            data_ultima_vista=datetime('now'),
-            preco_venda=COALESCE(excluded.preco_venda, preco_venda),
-            preco_aluguel=COALESCE(excluded.preco_aluguel, preco_aluguel),
-            condominio=COALESCE(excluded.condominio, condominio),
-            iptu=COALESCE(excluded.iptu, iptu),
-            foto_url=COALESCE(excluded.foto_url, foto_url),
-            latitude=COALESCE(excluded.latitude, latitude),
-            longitude=COALESCE(excluded.longitude, longitude),
-            removido=0
-        """
+        sql = f"""\n        INSERT INTO imoveis_watchdog (id, titulo, fonte, url, endereco, bairro, cidade, uf,\n            tipo, preco_venda, preco_aluguel, condominio, iptu, area_m2, quartos, banheiros,\n            vagas, descricao, foto_url, fotos, latitude, longitude, data_ultima_vista, removido)\n        VALUES ({esc(list_id)}, {esc(titulo)}, {esc(fonte)}, {esc(url)}, {esc(endereco)},\n            {esc(bairro)}, {esc(cidade)}, {esc(uf)}, {esc(tipo)},\n            {esc_null(preco_venda)}, {esc_null(preco_aluguel)}, {esc_null(condominio)},\n            {esc_null(iptu)}, {esc_null(area)}, {esc_null(quartos)},\n            {esc_null(banheiros)}, {esc_null(vagas)}, {esc(descricao)},\n            {esc(foto_url)}, {esc(fotos_json)}, {esc_null(latitude)}, {esc_null(longitude)},\n            datetime('now'), 0)\n        ON CONFLICT(id) DO UPDATE SET\n            data_ultima_vista=datetime('now'),\n            preco_venda=COALESCE(excluded.preco_venda, preco_venda),\n            preco_aluguel=COALESCE(excluded.preco_aluguel, preco_aluguel),\n            condominio=COALESCE(excluded.condominio, condominio),\n            iptu=COALESCE(excluded.iptu, iptu),\n            foto_url=COALESCE(excluded.foto_url, foto_url),\n            fotos=COALESCE(excluded.fotos, fotos),\n            latitude=COALESCE(excluded.latitude, latitude),\n            longitude=COALESCE(excluded.longitude, longitude),\n            removido=0\n        """
         try:
             _turso(sql)
             # Associa imóvel à busca na tabela de junção
