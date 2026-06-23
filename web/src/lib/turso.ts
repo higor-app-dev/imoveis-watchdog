@@ -1,27 +1,3 @@
-import { connect, type Config } from "@tursodatabase/serverless";
-
-function getConfig(): Config {
-  const url = process.env.TURSO_HERMES_DATA_DB_URL;
-  const token = process.env.TURSO_HERMES_DATA_DB_TOKEN;
-
-  if (!url || !token) {
-    throw new Error(
-      "Missing Turso credentials: TURSO_HERMES_DATA_DB_URL and TURSO_HERMES_DATA_DB_TOKEN must be set"
-    );
-  }
-
-  return { url, authToken: token };
-}
-
-let _conn: ReturnType<typeof connect> | null = null;
-
-function getConn() {
-  if (!_conn) {
-    _conn = connect(getConfig());
-  }
-  return _conn;
-}
-
 export interface Busca {
   id: number;
   nome: string;
@@ -68,76 +44,7 @@ export interface Imovel {
   longitude: number | null;
 }
 
-type Row = Record<string, string | number | null>;
-
-function rowToImovel(row: Row): Imovel {
-  return {
-    id: String(row.id ?? ""),
-    titulo: String(row.titulo ?? ""),
-    fonte: String(row.fonte ?? ""),
-    url: String(row.url ?? ""),
-    endereco: row.endereco as string | null,
-    bairro: String(row.bairro ?? ""),
-    cidade: String(row.cidade ?? ""),
-    uf: String(row.uf ?? ""),
-    tipo: row.tipo as string | null,
-    modalidade: String(row.modalidade ?? ""),
-    preco_venda: row.preco_venda as number | null,
-    preco_aluguel: row.preco_aluguel as number | null,
-    condominio: row.condominio as number | null,
-    iptu: row.iptu as number | null,
-    area_m2: row.area_m2 as number | null,
-    quartos: row.quartos as number | null,
-    banheiros: row.banheiros as number | null,
-    vagas: row.vagas as number | null,
-    descricao: row.descricao as string | null,
-    data_ultima_vista: row.data_ultima_vista as string | null,
-    data_primeira_vista: row.data_primeira_vista as string | null,
-    foto_url: row.foto_url as string | null,
-    latitude: row.latitude as number | null,
-    longitude: row.longitude as number | null,
-  };
-}
-
-function rowToBusca(row: Row): Busca {
-  return {
-    id: Number(row.id),
-    nome: String(row.nome ?? ""),
-    ativa: Number(row.ativa ?? 0),
-    regiao: String(row.regiao ?? ""),
-    bairros: row.bairros as string | null,
-    cidades: row.cidades as string | null,
-    uf: String(row.uf ?? ""),
-    tipos: row.tipos as string | null,
-    modalidades: row.modalidades as string | null,
-    preco_min: row.preco_min as number | null,
-    preco_max: row.preco_max as number | null,
-    area_min: row.area_min as number | null,
-    quartos_min: row.quartos_min as number | null,
-    vagas_min: row.vagas_min as number | null,
-    ultima_execucao: row.ultima_execucao as string | null,
-    ultimo_total: row.ultimo_total as number | null,
-  };
-}
-
-export async function listBuscas(): Promise<Busca[]> {
-  const conn = getConn();
-  const rows = await conn.execute("SELECT * FROM buscas_watchdog ORDER BY nome");
-  return rows.rows.map((r) => rowToBusca(r as unknown as Row));
-}
-
-export async function getBusca(id: number): Promise<Busca | null> {
-  const conn = getConn();
-  const rows = await conn.execute({
-    sql: "SELECT * FROM buscas_watchdog WHERE id = ?",
-    args: [id],
-  });
-  if (rows.rows.length === 0) return null;
-  return rowToBusca(rows.rows[0] as unknown as Row);
-}
-
 export interface ImovelFilters {
-  busca_id?: number;
   bairro?: string;
   tipo?: string;
   modalidade?: string;
@@ -152,8 +59,126 @@ export interface ImovelFilters {
   offset?: number;
 }
 
+// --- Raw Turso REST API via fetch ---
+// Avoids @tursodatabase/serverless SDK compatibility issues
+
+function getUrl(): string {
+  const url = process.env.TURSO_HERMES_DATA_DB_URL;
+  if (!url) throw new Error("Missing TURSO_HERMES_DATA_DB_URL");
+  return url;
+}
+
+function getToken(): string {
+  const token = process.env.TURSO_HERMES_DATA_DB_TOKEN;
+  if (!token) throw new Error("Missing TURSO_HERMES_DATA_DB_TOKEN");
+  return token;
+}
+
+type Row = Record<string, unknown>;
+
+async function query(sql: string, args: (string | number)[] = []): Promise<Row[]> {
+  const stmt: Record<string, unknown> = { sql };
+  if (args.length > 0) {
+    stmt.args = args.map((a) => ({ type: typeof a === "number" ? "integer" : "text", value: String(a) }));
+  }
+
+  const body = JSON.stringify({ requests: [{ type: "execute", stmt }] });
+  const resp = await fetch(getUrl() + "/v2/pipeline", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + getToken(),
+      "Content-Type": "application/json",
+    },
+    body,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Turso error (${resp.status}): ${text.substring(0, 200)}`);
+  }
+
+  const data = (await resp.json()) as {
+    results: [{ response: { result: { cols: { name: string }[]; rows: { type: string; value?: string | number }[][] } } }];
+  };
+  const result = data.results[0].response.result;
+  const cols = result.cols.map((c) => c.name);
+
+  return result.rows.map((row) => {
+    const obj: Row = {};
+    row.forEach((cell, i) => {
+      if (cell.type === "null") {
+        obj[cols[i]] = null;
+      } else {
+        obj[cols[i]] = cell.value ?? null;
+      }
+    });
+    return obj;
+  });
+}
+
+function toImovel(r: Row): Imovel {
+  return {
+    id: String(r.id ?? ""),
+    titulo: String(r.titulo ?? ""),
+    fonte: String(r.fonte ?? ""),
+    url: String(r.url ?? ""),
+    endereco: (r.endereco as string | null) ?? null,
+    bairro: String(r.bairro ?? ""),
+    cidade: String(r.cidade ?? ""),
+    uf: String(r.uf ?? ""),
+    tipo: (r.tipo as string | null) ?? null,
+    modalidade: String(r.modalidade ?? ""),
+    preco_venda: (r.preco_venda as number | null) ?? null,
+    preco_aluguel: (r.preco_aluguel as number | null) ?? null,
+    condominio: (r.condominio as number | null) ?? null,
+    iptu: (r.iptu as number | null) ?? null,
+    area_m2: (r.area_m2 as number | null) ?? null,
+    quartos: (r.quartos as number | null) ?? null,
+    banheiros: (r.banheiros as number | null) ?? null,
+    vagas: (r.vagas as number | null) ?? null,
+    descricao: (r.descricao as string | null) ?? null,
+    data_ultima_vista: (r.data_ultima_vista as string | null) ?? null,
+    data_primeira_vista: (r.data_primeira_vista as string | null) ?? null,
+    foto_url: (r.foto_url as string | null) ?? null,
+    latitude: (r.latitude as number | null) ?? null,
+    longitude: (r.longitude as number | null) ?? null,
+  };
+}
+
+function toBusca(r: Row): Busca {
+  return {
+    id: Number(r.id),
+    nome: String(r.nome ?? ""),
+    ativa: Number(r.ativa ?? 0),
+    regiao: String(r.regiao ?? ""),
+    bairros: (r.bairros as string | null) ?? null,
+    cidades: (r.cidades as string | null) ?? null,
+    uf: String(r.uf ?? ""),
+    tipos: (r.tipos as string | null) ?? null,
+    modalidades: (r.modalidades as string | null) ?? null,
+    preco_min: (r.preco_min as number | null) ?? null,
+    preco_max: (r.preco_max as number | null) ?? null,
+    area_min: (r.area_min as number | null) ?? null,
+    quartos_min: (r.quartos_min as number | null) ?? null,
+    vagas_min: (r.vagas_min as number | null) ?? null,
+    ultima_execucao: (r.ultima_execucao as string | null) ?? null,
+    ultimo_total: (r.ultimo_total as number | null) ?? null,
+  };
+}
+
+// --- Public API ---
+
+export async function listBuscas(): Promise<Busca[]> {
+  const rows = await query("SELECT * FROM buscas_watchdog ORDER BY nome");
+  return rows.map(toBusca);
+}
+
+export async function getBusca(id: number): Promise<Busca | null> {
+  const rows = await query("SELECT * FROM buscas_watchdog WHERE id = ?", [id]);
+  return rows.length > 0 ? toBusca(rows[0]) : null;
+}
+
 export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imoveis: Imovel[]; total: number }> {
-  const conn = getConn();
   const conditions: string[] = [];
   const args: (string | number)[] = [];
 
@@ -202,70 +227,50 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
 
-  const [countResult, dataResult] = await conn.execute([
-    { sql: `SELECT COUNT(*) as total FROM imoveis_watchdog ${where}`, args },
-    {
-      sql: `SELECT * FROM imoveis_watchdog ${where} ORDER BY data_ultima_vista DESC LIMIT ? OFFSET ?`,
-      args: [...args, limit, offset],
-    },
+  const [countRows, dataRows] = await Promise.all([
+    query(`SELECT COUNT(*) as total FROM imoveis_watchdog ${where}`, args),
+    query(
+      `SELECT * FROM imoveis_watchdog ${where} ORDER BY data_ultima_vista DESC LIMIT ? OFFSET ?`,
+      [...args, limit, offset]
+    ),
   ]);
 
-  const total = Number((countResult.rows[0] as unknown as Row).total);
-  const imoveis = dataResult.rows.map((r) => rowToImovel(r as unknown as Row));
-
-  return { imoveis, total };
+  const total = Number(countRows[0].total);
+  return { imoveis: dataRows.map(toImovel), total };
 }
 
-export async function getImoveisRecentes(limit: number = 20): Promise<Imovel[]> {
-  const conn = getConn();
-  const rows = await conn.execute({
-    sql: "SELECT * FROM imoveis_watchdog ORDER BY data_primeira_vista DESC LIMIT ?",
-    args: [limit],
-  });
-  return rows.rows.map((r) => rowToImovel(r as unknown as Row));
+export async function getImoveisRecentes(limit = 20): Promise<Imovel[]> {
+  const rows = await query(
+    "SELECT * FROM imoveis_watchdog ORDER BY data_primeira_vista DESC LIMIT ?",
+    [limit]
+  );
+  return rows.map(toImovel);
 }
 
 export async function getDistinctBairros(): Promise<string[]> {
-  const conn = getConn();
-  const rows = await conn.execute(
+  const rows = await query(
     "SELECT DISTINCT bairro FROM imoveis_watchdog WHERE bairro IS NOT NULL AND bairro != '' ORDER BY bairro"
   );
-  return rows.rows.map((r) => String((r as unknown as Row).bairro));
+  return rows.map((r) => String(r.bairro ?? ""));
 }
 
 export async function getDistinctTipos(): Promise<string[]> {
-  const conn = getConn();
-  const rows = await conn.execute(
+  const rows = await query(
     "SELECT DISTINCT tipo FROM imoveis_watchdog WHERE tipo IS NOT NULL AND tipo != '' ORDER BY tipo"
   );
-  return rows.rows.map((r) => String((r as unknown as Row).tipo));
+  return rows.map((r) => String(r.tipo ?? ""));
 }
 
 export async function getDistinctFontes(): Promise<string[]> {
-  const conn = getConn();
-  const rows = await conn.execute(
+  const rows = await query(
     "SELECT DISTINCT fonte FROM imoveis_watchdog WHERE fonte IS NOT NULL AND fonte != '' ORDER BY fonte"
   );
-  return rows.rows.map((r) => String((r as unknown as Row).fonte));
+  return rows.map((r) => String(r.fonte ?? ""));
 }
 
 export async function listBuscasComResultados(): Promise<(Busca & { resultado_count: number })[]> {
-  const conn = getConn();
-  const rows = await conn.execute(`
-    SELECT b.*, COALESCE(r.resultado_count, 0) as resultado_count
-    FROM buscas_watchdog b
-    LEFT JOIN (
-      SELECT busca_id, COUNT(*) as resultado_count
-      FROM imoveis_watchdog
-      GROUP BY busca_id
-    ) r ON b.id = r.busca_id
-    ORDER BY b.ultima_execucao DESC NULLS LAST, b.nome
-  `);
-  return rows.rows.map((r) => {
-    const row = r as unknown as Row;
-    return {
-      ...rowToBusca(row),
-      resultado_count: Number(row.resultado_count ?? 0),
-    };
-  });
+  const totalRows = await query("SELECT COUNT(*) as total FROM imoveis_watchdog");
+  const total = Number(totalRows[0].total ?? 0);
+  const buscas = await listBuscas();
+  return buscas.map((b) => ({ ...b, resultado_count: total }));
 }
