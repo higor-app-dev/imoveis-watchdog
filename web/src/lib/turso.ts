@@ -57,6 +57,7 @@ export interface ImovelFilters {
   vagas_min?: number;
   cidade?: string;
   fonte?: string;
+  fontes?: string[];
   limit?: number;
   offset?: number;
   sort?: "data" | "preco" | "area";
@@ -226,7 +227,11 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
     conditions.push("id = ?");
     args.push(filters.id);
   }
-  if (filters.fonte) {
+  if (filters.fontes && filters.fontes.length > 0) {
+    const placeholders = filters.fontes.map(() => "?").join(",");
+    conditions.push(`fonte IN (${placeholders})`);
+    args.push(...filters.fontes);
+  } else if (filters.fonte) {
     conditions.push("fonte = ?");
     args.push(filters.fonte);
   }

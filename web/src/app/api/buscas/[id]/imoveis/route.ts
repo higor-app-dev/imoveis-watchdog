@@ -20,8 +20,14 @@ export async function GET(
     }
 
     const { searchParams } = new URL(_request.url);
+    const fonteParam = searchParams.get("fontes");
+    const fontes = fonteParam
+      ? fonteParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
     const filters: ImovelFilters = {
       busca_id: buscaId,
+      fontes,
       bairro: searchParams.get("bairro") || undefined,
       tipo: searchParams.get("tipo") || undefined,
       modalidade: searchParams.get("modalidade") || undefined,

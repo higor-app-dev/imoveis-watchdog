@@ -246,6 +246,18 @@ def executar_busca(
             if not any(b.lower() in item_bairro or item_bairro in b.lower() for b in bairros_set):
                 continue
 
+        # Filtro de cidade + UF
+        cidades_list: list[str] = json.loads(busca.get("cidades", '["São Paulo"]'))
+        uf_busca = str(busca.get("uf", "SP")).strip().upper()
+        item_cidade = str(item.get("cidade", item.get("municipality", item.get("location_city", "")))).strip().lower()
+        item_uf = str(item.get("uf", item.get("stateCode", item.get("location_state", "")))).strip().upper()
+        if cidades_list:
+            cidade_match = any(c.lower() in item_cidade or item_cidade in c.lower() for c in cidades_list)
+            if not cidade_match:
+                continue
+        if uf_busca and item_uf and item_uf != uf_busca:
+            continue
+
         # Filtro de preço (tenta todos os nomes de campo conhecidos)
         price = item.get("preco_venda", item.get("salePrice", item.get("price", item.get("askingPrice", 0))))
         if price and isinstance(price, (int, float)):

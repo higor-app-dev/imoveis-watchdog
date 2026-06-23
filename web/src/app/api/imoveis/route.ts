@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
       modalidade: searchParams.get("modalidade") || undefined,
       cidade: searchParams.get("cidade") || undefined,
       fonte: searchParams.get("fonte") || undefined,
+      fontes: searchParams.get("fontes")
+        ? searchParams.get("fontes")!.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined,
       preco_max: searchParams.get("preco_max")
         ? Number(searchParams.get("preco_max"))
         : undefined,
