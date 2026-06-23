@@ -1,0 +1,7 @@
+# Dependências do EmCasa Skill
+# O cliente da API (emcasa_api.py) usa apenas stdlib (json, urllib, dataclasses).
+# O parser (emcasa_parser.py) também usa apenas stdlib.
+# Nenhuma dependência externa necessária — este arquivo é um stub.
+#
+# Para testes (opcional):
+# pytest>=7.0

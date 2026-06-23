@@ -391,6 +391,56 @@ def _tipo_para_en(tipo_br: str) -> str:
     return inv_map.get(t, t)
 
 
+# ── Normalização de URLs de fotos ─────────────────────────────────────────────
+
+CDN_FNDN_AI = "cdn.fndn.ai"
+HIGH_RES_MAP = {
+    "/detail": "/large",
+    "/thumbnail": "/large",
+    "/thumb": "/large",
+}
+
+
+def _normalize_to_high_res(url: str) -> str:
+    """
+    Converte URLs de imagens do CDN da EmCasa para alta resolução.
+
+    O CDN ``cdn.fndn.ai`` serve imagens com sufixos de tamanho:
+      - ``/thumbnail`` (~6KB) — miniatura
+      - ``/detail`` (~238KB) — média
+      - ``/large`` (~1MB) — alta resolução (target)
+      - ``/full``, ``/medium``, ``/small``, ``/orig`` — outros
+
+    Retorna ``/large`` sempre que detecta um sufixo conhecido.
+    Para URLs de outros CDNs, retorna a URL original.
+    """
+    if not isinstance(url, str) or not url.startswith("http"):
+        return url
+    for old_suffix, new_suffix in HIGH_RES_MAP.items():
+        if old_suffix in url:
+            return url.replace(old_suffix, new_suffix)
+    return url
+
+
+def _normalize_photo_urls(raw_list: list) -> list[str]:
+    """
+    Normaliza uma lista de URLs de fotos: converte para alta resolução
+    e filtra apenas URLs HTTP(S) absolutas.
+    """
+    if not isinstance(raw_list, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for u in raw_list:
+        if not isinstance(u, str) or not u.startswith("http"):
+            continue
+        high_res = _normalize_to_high_res(u)
+        if high_res not in seen:
+            seen.add(high_res)
+            result.append(high_res)
+    return result
+
+
 # ── Parser: Documento API → dict normalizado ──────────────────────────────────
 
 def parse_hit(doc: dict) -> dict:
@@ -402,6 +452,11 @@ def parse_hit(doc: dict) -> dict:
         preco_venda, preco_aluguel, condominio, iptu,
         area, quartos, banheiros, vagas, tipo,
         descricao, amenities, fotos, data_coleta
+
+    Fotos:
+      - ``imageUrls`` → normalizadas para alta resolução (cdn.fndn.ai/.../large)
+      - ``primaryImageUrl`` → posicionada como primeira foto (index 0)
+      - Duplicatas são removidas (por URL única)
     """
     now = datetime.now(timezone.utc).isoformat()
     d = doc.get("document", doc)  # hits podem ser {document: {...}} ou diretos
@@ -465,12 +520,19 @@ def parse_hit(doc: dict) -> dict:
 
     all_features = sorted(set(amenities + features))
 
-    # Fotos
-    fotos = d.get("imageUrls", []) or []
-    if isinstance(fotos, list):
-        fotos = [str(u) for u in fotos if str(u).startswith("http")]
-    else:
-        fotos = []
+    # Fotos — normalizar para alta resolução (cdn.fndn.ai/.../large)
+    fotos = _normalize_photo_urls(d.get("imageUrls", []))
+
+    # primaryImageUrl como primeira foto (se disponível e diferente)
+    primary = d.get("primaryImageUrl")
+    if primary and isinstance(primary, str) and primary.startswith("http"):
+        primary_hr = _normalize_to_high_res(primary)
+        if not fotos:
+            fotos = [primary_hr]
+        elif fotos[0] != primary_hr:
+            # Move primary_hr para o topo, removendo duplicata se existir
+            fotos = [u for u in fotos if u != primary_hr]
+            fotos.insert(0, primary_hr)
 
     # Coordenadas
     coords = d.get("coordinates", [None, None])

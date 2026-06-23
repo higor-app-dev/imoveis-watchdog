@@ -54,3 +54,9 @@ watchdog:
     min_bedrooms: 2
     max_age_days: 30
     max_results_per_query: 50
+
+  # Configuração do cache de paginação
+  cache:
+    enabled: true                     # false → NullCache (sem cache)
+    dir: "data/cache"                 # diretório dos arquivos de cache
+    ttl_seconds: 1800                 # 30 minutos de validade por página

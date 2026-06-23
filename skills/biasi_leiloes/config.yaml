@@ -1,0 +1,98 @@
+# Biasi Leilões — Configuração de Extração
+# https://www.biasileiloes.com.br
+
+# URL Base
+base_url: "https://www.biasileiloes.com.br"
+
+# CDN de imagens
+cdn:
+  base: "https://cdn-biasi.blueintra.com/images/lot"
+  sizes:
+    thumb: 250
+    medium: 500
+    large: 1000
+  default_size: 1000
+
+# Headers HTTP
+headers:
+  default:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    Accept-Language: "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+
+# Rotas
+routes:
+  ajax_search: "/Sale/LotListSearch"       # AJAX partial: ?start=0&limit=20&categoria=1
+  detail: "/sale/detail"                    # Detail page: ?id={NUM}
+  auction: "/leilao/{auctionId}/{slug}"     # Auction listing page
+  banks:
+    santander: "/leiloes/santander"
+    itau: "/leiloes/itau"
+    rodobens: "/leiloes/rodobenssa"
+
+# Paginação
+pagination:
+  mode: "ajax_offset"     # Via start/limit na AJAX search
+  items_per_page: 20
+  max_pages: 50           # Safety cap
+  max_items: 1000
+
+# Categorias
+categorias:
+  1: "Imóveis"
+  2: "Veículos"
+  3: "Diversos"
+
+# Campos extraídos por fonte
+fields:
+  detail_api:
+    # Campos da página de detalhe
+    - id                    # ID numérico do anúncio
+    - titulo                # Título principal
+    - descricao             # Descrição do imóvel
+    - valor_primeira_praca  # Valor de avaliação / 1ª praça
+    - valor_segunda_praca   # Valor 2ª praça
+    - data_primeira_praca   # Data do leilão (1ª praça)
+    - data_segunda_praca    # Data da 2ª praça
+    - endereco              # Endereço completo
+    - bairro                # Bairro
+    - cidade                # Cidade
+    - estado                # Estado/UF
+    - cep                   # CEP
+    - modalidade            # Judicial / Extrajudicial
+    - processo              # Número do processo
+    - vara                  # Vara / Foro
+    - leiloeiro             # Nome do leiloeiro
+    - comissao              # Comissão do leiloeiro
+    - foto_principal        # Foto principal (og:image)
+    - fotos                 # Array de fotos
+    - status                # Status do anúncio
+    - area                  # Área do imóvel (m²)
+    - quartos               # Número de quartos
+    - vagas                 # Vagas de garagem
+    - edital_url            # URL do edital
+    - matricula_url         # URL da matrícula
+
+# Mapeamento de status (Português → Inglês)
+status_labels:
+  "Liberado para Lance": "open"
+  "Não Iniciado": "upcoming"
+  "Vendido": "sold"
+  "Removido": "removed"
+
+# Filtros
+filtros:
+  categorias_interesse: [1]  # 1 = Imóveis
+  status_ativos: ["Liberado para Lance", "Não Iniciado"]
+
+# Estratégia
+estrategia: "ajax_ssr"        # Primária: AJAX + SSR (sem Cloudflare)
+cloudflare: false             # Biasi está atrás de GoCache CDN, sem Cloudflare
+
+# Timeout
+timeout_seconds: 30
+
+# Cache
+cache:
+  enabled: true
+  ttl_seconds: 600  # 10 min

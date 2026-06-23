@@ -1,0 +1,108 @@
+# ── Configuração da Lello Imóveis Skill ─────────────────────────────────────
+# Skill: skills/lello-imoveis/
+# API:   https://apidev3.lelloimoveis.com.br (Next.js Pages Router, React Query)
+# Docs:  SKILL.md
+
+# ── Fontes ──────────────────────────────────────────────────────────────────
+fonte: lelloimoveis
+
+# ── URLs ────────────────────────────────────────────────────────────────────
+base_url: "https://www.lelloimoveis.com.br"
+api_url: "https://apidev3.lelloimoveis.com.br"
+
+# ── Padrão de URLs ──────────────────────────────────────────────────────────
+url_patterns:
+  busca:
+    padrao: "/venda/residencial/{tipo}-tipos/{pagina}-pagina/"
+    exemplos:
+      - "/venda/residencial/apartamento-tipos/1-pagina/"
+      - "/venda/residencial/casa-tipos/1-pagina/"
+      - "/venda/residencial/tipos/1-pagina/"
+      - "/venda/residencial/terreno-tipos/1-pagina/"
+  detalhe:
+    padrao: "/imovel/{codigo}/{slug}/"
+    slug: "{tipo}-{bairro}-sao_paulo-venda"
+  aluguel:
+    padrao: "/aluguel/residencial/{tipo}-tipos/{pagina}-pagina/"
+
+# ── Cidades atendidas ───────────────────────────────────────────────────────
+# Lello cobre principalmente São Paulo e região metropolitana.
+cidades_permitidas:
+  - cidade: "São Paulo"
+    uf: "SP"
+  - cidade: "Santo André"
+    uf: "SP"
+  - cidade: "São Bernardo do Campo"
+    uf: "SP"
+  - cidade: "São Caetano do Sul"
+    uf: "SP"
+  - cidade: "Guarulhos"
+    uf: "SP"
+  - cidade: "Osasco"
+    uf: "SP"
+
+# ── Paginação ───────────────────────────────────────────────────────────────
+paginacao:
+  listings_per_page: 20      # ~18-21 listings por página SSR
+  page_index_base: 1         # 1-indexed (primeira página = 1)
+  max_pages: null            # null = todas; número para limitar
+  delay_segundos: 0.5        # rate limiting entre requisições
+  max_retries: 3
+
+# ── Tipos de imóvel (mapeamento URL slug → PT-BR) ─────────────────────────
+tipos_imovel:
+  apartamento: apartamento
+  casa: casa
+  cobertura: cobertura
+  duplex: duplex
+  kitnet: kitnet
+  loft: loft
+  studio: studio
+  terreno: terreno
+  area: area
+  comercial: comercial
+  sala: sala_comercial
+  predio: predio
+
+# ── Schema de saída unificado ──────────────────────────────────────────────
+# Campos normalizados (agnóstico à fonte) — vide imovel_schema.py.
+schema_unificado:
+  campos:
+    - id:              # str — "lello_{codigo}"
+    - titulo:          # str — "Apartamento em Mooca/SP"
+    - url:             # str — URL direta em www.lelloimoveis.com.br
+    - fonte:           # str — "lelloimoveis"
+    - endereco:        # str — logradouro + número (ex.: "Rua Padre Benedito Maria Cardoso")
+    - bairro:          # str — bairro (ex.: "Mooca")
+    - cidade:          # str — cidade
+    - uf:              # str — sigla (SP)
+    - preco_venda:     # float | None — preço de venda (R$)
+    - preco_aluguel:   # float | None — preço de aluguel (R$)
+    - condominio:      # float | None — valor do condomínio (R$)
+    - iptu:            # float | None — IPTU (R$/mês)
+    - area:            # float | None — área total (m²)
+    - quartos:         # int | None — dormitórios
+    - banheiros:       # int | None — banheiros
+    - vagas:           # int | None — vagas de garagem
+    - tipo:            # str — tipo (apartamento, casa, ...)
+    - descricao:       # str — descrição do anúncio
+    - amenities:       # list[str] — amenidades do condomínio
+    - fotos:           # list[str] — URLs das fotos
+    - data_coleta:     # str — ISO timestamp da coleta
+    - data_publicacao: # str | None — data de publicação
+
+  campos_extras:
+    # Campos Lello preservados em _extra sem quebrar o schema:
+    - codigo:            # int — código do imóvel na Lello
+    - andar:             # str | None — andar do apartamento
+    - disponivel:        # bool — se o imóvel ainda está disponível
+    - tipo_anuncio:      # str — "venda" | "aluguel"
+    - tipo_uso:          # str — "residencial" | "comercial"
+    - suites:            # int | None — suítes
+    - foto_count:        # int | None — quantidade de fotos
+    - condominio_nome:   # str | None — nome do edifício/condomínio
+
+# ── Cache ──────────────────────────────────────────────────────────────────
+cache:
+  enabled: true
+  diretorio: "data/lello_cache"  # relativo à raiz do projeto

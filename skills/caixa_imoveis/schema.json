@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Caixa Imóveis — Schema Normalizado",
+  "description": "Schema unificado para imóveis da Caixa Econômica Federal (venda-imoveis.caixa.gov.br). Compatível com o schema Imovel da watchdog_pipeline.",
+  "fonte": "caixa",
+  "version": "1.0.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identificador único no formato 'caixa_{propertyNumber}'",
+      "example": "caixa_155550814458-7"
+    },
+    "origem_id": {
+      "type": "string",
+      "description": "ID original na fonte (propertyNumber, N. do imóvel ou objectID)",
+      "example": "155550814458-7"
+    },
+    "titulo": {
+      "type": "string",
+      "description": "Título do anúncio. Construído a partir de tipo + bairro + cidade se não houver título explícito.",
+      "example": "Apartamento — VILA PRUDENTE — SAO PAULO"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL absoluta da página de detalhe",
+      "example": "https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnOrigem=index&hdnimovel=155550814458-7"
+    },
+    "fonte": {
+      "type": "string",
+      "const": "caixa",
+      "description": "Nome da fonte (sempre 'caixa')"
+    },
+    "endereco": {
+      "type": "string",
+      "description": "Endereço completo (logradouro + número)",
+      "example": "RUA DAS LOBELIAS, N. 380 Apto. 44 BL B"
+    },
+    "bairro": {
+      "type": "string",
+      "description": "Bairro do imóvel",
+      "example": "VILA PRUDENTE"
+    },
+    "cidade": {
+      "type": "string",
+      "description": "Cidade (maiúsculo, conforme padrão Caixa)",
+      "example": "SAO PAULO"
+    },
+    "uf": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 2,
+      "description": "Sigla do estado (UF)",
+      "example": "SP"
+    },
+    "cep": {
+      "type": "string",
+      "description": "CEP do imóvel",
+      "example": "03155-000"
+    },
+    "preco_venda": {
+      "type": "number",
+      "description": "Preço de venda (valor mínimo de venda, com desconto aplicado). Float em R$.",
+      "example": 310000.0
+    },
+    "area": {
+      "type": ["number", "null"],
+      "description": "Área privativa em m². null se não informado.",
+      "example": 55.0
+    },
+    "quartos": {
+      "type": ["integer", "null"],
+      "description": "Número de quartos / dormitórios. null se não informado.",
+      "example": 2
+    },
+    "vagas": {
+      "type": ["integer", "null"],
+      "description": "Número de vagas de garagem. null se não informado.",
+      "example": 1
+    },
+    "tipo": {
+      "type": "string",
+      "description": "Tipo do imóvel (Apartamento, Casa, Terreno, etc.)",
+      "example": "Apartamento"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descrição textual do imóvel",
+      "example": "Apartamento 2 quartos, 1 vaga, próximo ao metrô Vila Prudente."
+    },
+    "fotos": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Lista de URLs das fotos. Acessíveis via Azion CDN — sem proteção Radware.",
+      "example": ["https://venda-imoveis.caixa.gov.br/fotos/F1555508144587.jpg"]
+    },
+    "data_coleta": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de quando os dados foram coletados"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de criação do registro no sistema"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 da última atualização"
+    },
+
+    "caixa_valor_avaliacao": {
+      "type": ["number", "null"],
+      "description": "Valor de avaliação do imóvel (R$). Campo específico Caixa.",
+      "example": 350000.0
+    },
+    "caixa_desconto_percentual": {
+      "type": ["number", "null"],
+      "description": "Percentual de desconto sobre o valor de avaliação. Campo específico Caixa.",
+      "example": 11.43
+    },
+    "caixa_modalidade": {
+      "type": "string",
+      "description": "Modalidade de venda (Venda Online, Venda Direta Online, Leilão SFI, etc.)",
+      "enum": [
+        "1º Leilão SFI",
+        "2º Leilão SFI",
+        "Concorrência Pública",
+        "Leilão SFI - Edital Único",
+        "Licitação Aberta",
+        "Venda Online",
+        "Venda Direta Online",
+        "Venda Direta FAR"
+      ],
+      "example": "Venda Online"
+    },
+    "caixa_tipo_venda": {
+      "type": "string",
+      "description": "Classificação do tipo de venda (derivado da modalidade)",
+      "enum": ["venda_direta", "leilao"],
+      "example": "venda_direta"
+    },
+    "caixa_primeira_data_leilao": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Data do primeiro leilão / data de início da venda. Campo específico Caixa.",
+      "example": "2026-07-15 10:00:00"
+    },
+    "caixa_segunda_data_leilao": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Data do segundo leilão (para modalidades de leilão). Campo específico Caixa.",
+      "example": "2026-08-15 10:00:00"
+    },
+    "caixa_formas_pagamento": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Formas de pagamento disponíveis",
+      "example": ["Financiamento Caixa", "FGTS"]
+    },
+    "caixa_regras_despesas": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Regras de despesas (condomínio, IPTU, etc.)",
+      "example": ["Comprador responsável por IPTU e condomínio"]
+    },
+    "caixa_ocupacao": {
+      "type": ["string", "null"],
+      "description": "Status de ocupação do imóvel",
+      "enum": ["Desocupado", "Ocupado", null]
+    },
+    "caixa_aceita_fgts": {
+      "type": ["boolean", "null"],
+      "description": "Indica se o imóvel aceita uso de FGTS no financiamento"
+    },
+    "caixa_edital": {
+      "type": ["string", "null"],
+      "description": "Número do edital de venda / leilão",
+      "example": "EDITAL-2026-042"
+    },
+    "caixa_matricula": {
+      "type": ["string", "null"],
+      "description": "Número da matrícula do imóvel",
+      "example": "41550"
+    },
+    "caixa_leiloeiro": {
+      "type": ["string", "null"],
+      "description": "Nome do leiloeiro (para modalidades de leilão)",
+      "example": "RUDIVAL ALMEIDA GOMES JUNIOR"
+    },
+    "caixa_cartorio": {
+      "type": ["string", "null"],
+      "description": "Número do cartório / ofício",
+      "example": "03"
+    },
+    "caixa_comarca": {
+      "type": ["string", "null"],
+      "description": "Comarca / notary district"
+    },
+    "caixa_registro_imovel": {
+      "type": ["string", "null"],
+      "description": "Inscrição imobiliária / real estate registration (ID único do imóvel na Caixa)",
+      "example": "1311000083950314"
+    },
+    "caixa_numero_item": {
+      "type": ["integer", "null"],
+      "description": "Número do item no leilão",
+      "example": 566
+    },
+    "caixa_area_total": {
+      "type": ["number", "null"],
+      "description": "Área total do imóvel em m²",
+      "example": 65.0
+    },
+    "caixa_area_terreno": {
+      "type": ["number", "null"],
+      "description": "Área do terreno em m²",
+      "example": 500.0
+    }
+  },
+  "required": ["id", "fonte", "data_coleta", "created_at", "updated_at"],
+  "defs": {
+    "FieldSourceMapping": {
+      "description": "Mapeamento entre campos do portal Caixa e campos do schema unificado",
+      "entries": [
+        { "caixa": "propertyNumber", "schema": "origem_id" },
+        { "caixa": "state / UF / estado", "schema": "uf" },
+        { "caixa": "city / Cidade", "schema": "cidade" },
+        { "caixa": "district / Bairro", "schema": "bairro" },
+        { "caixa": "address / Endereço", "schema": "endereco" },
+        { "caixa": "zipCode / CEP", "schema": "cep" },
+        { "caixa": "propertyType / Tipo", "schema": "tipo" },
+        { "caixa": "rooms / Quartos", "schema": "quartos" },
+        { "caixa": "garage / Vagas", "schema": "vagas" },
+        { "caixa": "privateArea / Área privativa", "schema": "area" },
+        { "caixa": "totalArea / Área total", "schema": "caixa_area_total" },
+        { "caixa": "landArea / Área do terreno", "schema": "caixa_area_terreno" },
+        { "caixa": "evaluationValue / Valor de avaliação", "schema": "caixa_valor_avaliacao" },
+        { "caixa": "minimumSaleValue / Preço", "schema": "preco_venda" },
+        { "caixa": "discount / Desconto", "schema": "caixa_desconto_percentual" },
+        { "caixa": "modality / Modalidade de venda", "schema": "caixa_modalidade" },
+        { "caixa": "firstAuctionDate", "schema": "caixa_primeira_data_leilao" },
+        { "caixa": "secondAuctionDate", "schema": "caixa_segunda_data_leilao" },
+        { "caixa": "paymentMethods", "schema": "caixa_formas_pagamento" },
+        { "caixa": "expenseRules", "schema": "caixa_regras_despesas" },
+        { "caixa": "occupancy / ocupacao", "schema": "caixa_ocupacao" },
+        { "caixa": "acceptsFGTS / aceita_fgts", "schema": "caixa_aceita_fgts" },
+        { "caixa": "description / Descrição", "schema": "descricao" },
+        { "caixa": "registrationNumber / matricula", "schema": "caixa_matricula" },
+        { "caixa": "notaryOffice / cartorio", "schema": "caixa_cartorio" },
+        { "caixa": "propertyRegistration / registro_imovel", "schema": "caixa_registro_imovel" },
+        { "caixa": "edital", "schema": "caixa_edital" },
+        { "caixa": "auctioneer / leiloeiro", "schema": "caixa_leiloeiro" },
+        { "caixa": "numberItem / numero_item", "schema": "caixa_numero_item" },
+        { "caixa": "image / foto_principal", "schema": "foto_principal" },
+        { "caixa": "fotos[] / photos[] / imagens[]", "schema": "fotos" },
+        { "caixa": "url / Link de acesso", "schema": "url" }
+      ]
+    },
+    "ModalidadeMapping": {
+      "description": "Mapeamento de códigos de modalidade para classificação venda_direta / leilao",
+      "venda_direta": [33, 34, 9],
+      "leilao": [4, 5, 2, 14, 21]
+    }
+  }
+}

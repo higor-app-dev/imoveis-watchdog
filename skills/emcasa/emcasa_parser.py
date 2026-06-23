@@ -253,8 +253,17 @@ def from_emcasa_hit(
     amenities = [_normalize_amenity(a) for a in all_features_raw if a.strip()]
 
     # ─ Fotos ───────────────────────────────────────────────────────────────
-    fotos_raw = _as_list(d.get("imageUrls", []))
-    fotos = [str(u) for u in fotos_raw if isinstance(u, str) and u.startswith("http")]
+    fotos = _normalize_photo_urls(d.get("imageUrls", []))
+
+    # primaryImageUrl como primeira foto (se disponível e diferente)
+    primary = d.get("primaryImageUrl")
+    if primary and isinstance(primary, str) and primary.startswith("http"):
+        primary_hr = _normalize_to_high_res(primary)
+        if not fotos:
+            fotos = [primary_hr]
+        elif fotos[0] != primary_hr:
+            fotos = [u for u in fotos if u != primary_hr]
+            fotos.insert(0, primary_hr)
 
     # ─ Data de publicação ──────────────────────────────────────────────────
     data_pub = d.get("createdAt") or d.get("createdAtIso") or d.get("publishDate")
@@ -474,6 +483,55 @@ def _normalize_amenity(name: str) -> str:
     name = name.replace(" ", "_").replace("-", "_")
     name = re.sub(r"[^a-z0-9_]", "", name)
     return name
+
+
+# ── Normalização de URLs de fotos ─────────────────────────────────────────────
+
+CDN_FNDN_AI = "cdn.fndn.ai"
+HIGH_RES_MAP = {
+    "/detail": "/large",
+    "/thumbnail": "/large",
+    "/thumb": "/large",
+}
+
+
+def _normalize_to_high_res(url: str) -> str:
+    """
+    Converte URLs de imagens do CDN da EmCasa para alta resolução.
+
+    O CDN ``cdn.fndn.ai`` serve imagens com sufixos de tamanho:
+      - ``/thumbnail`` (~6KB) — miniatura
+      - ``/detail`` (~238KB) — média
+      - ``/large`` (~1MB) — alta resolução (target)
+
+    Retorna ``/large`` sempre que detecta um sufixo conhecido.
+    Para URLs de outros CDNs, retorna a URL original.
+    """
+    if not isinstance(url, str) or not url.startswith("http"):
+        return url
+    for old_suffix, new_suffix in HIGH_RES_MAP.items():
+        if old_suffix in url:
+            return url.replace(old_suffix, new_suffix)
+    return url
+
+
+def _normalize_photo_urls(raw_list: list) -> list[str]:
+    """
+    Normaliza uma lista de URLs de fotos: converte para alta resolução,
+    filtra apenas URLs HTTP(S) absolutas, remove duplicatas.
+    """
+    if not isinstance(raw_list, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for u in raw_list:
+        if not isinstance(u, str) or not u.startswith("http"):
+            continue
+        high_res = _normalize_to_high_res(u)
+        if high_res not in seen:
+            seen.add(high_res)
+            result.append(high_res)
+    return result
 
 
 # ── Processamento de arquivo ─────────────────────────────────────────────────

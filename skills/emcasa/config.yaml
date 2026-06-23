@@ -1,0 +1,93 @@
+# ── Configuração do EmCasa Skill ──────────────────────────────────────────────
+# Skill: skills/emcasa/
+# API:   POST https://cdn.fndn.ai/site/api/sites/{SITE_ID}/search
+# Docs:  SKILL.md
+
+# ── Fontes ────────────────────────────────────────────────────────────────────
+fonte: emcasa
+site_id: ab158f8f-0a75-4f9f-8a9b-54b834aa2698
+
+# ── URLs ──────────────────────────────────────────────────────────────────────
+base_url: "https://www.emcasa.com"
+api_url: "https://cdn.fndn.ai/site/api/sites/{site_id}/search"
+
+# ── Cidades permitidas (cidade + UF) ──────────────────────────────────────────
+# Formato usado em targets.yaml e nos filtros da API.
+cidades_permitidas:
+  - cidade: "São Paulo"
+    uf: "SP"
+  - cidade: "Campinas"
+    uf: "SP"
+  - cidade: "Rio de Janeiro"
+    uf: "RJ"
+  - cidade: "Niterói"
+    uf: "RJ"
+
+# ── Paginação ─────────────────────────────────────────────────────────────────
+paginacao:
+  hits_per_page: 12        # default da API
+  max_per_page: 250        # máximo testado empiricamente
+  page_index_base: 1       # 1-indexed (primeira página = 1)
+  max_pages: null          # null = todas; número para limitar
+  delay_segundos: 0.5      # rate limiting entre requisições
+  max_retries: 3
+
+# ── Tipos de imóvel (mapeamento EN → PT-BR) ──────────────────────────────────
+tipos_imovel:
+  apartment: apartamento
+  house: casa
+  penthouse: cobertura
+  flat: flat
+  kitnet: kitnet
+  loft: loft
+  townhouse: sobrado
+  studio: studio
+  commercial: comercial
+  land: terreno
+
+# ── Schema de saída unificado ─────────────────────────────────────────────────
+# Campos normalizados (agnóstico à fonte) — vide imovel_schema.py.
+schema_unificado:
+  campos:
+    - id:              # str — "emcasa_{uuid}"
+    - titulo:          # str — título do anúncio
+    - url:             # str — URL direta em www.emcasa.com
+    - fonte:           # str — "emcasa"
+    - endereco:        # str — logradouro + número
+    - bairro:          # str — bairro
+    - cidade:          # str — cidade
+    - uf:              # str — sigla (SP, RJ)
+    - preco_venda:     # float | None — preço de venda (R$)
+    - preco_aluguel:   # None — EmCasa não expõe aluguel
+    - condominio:      # float | None — valor do condomínio (R$)
+    - iptu:            # float | None — IPTU anual (R$)
+    - area:            # float | None — área total (m²)
+    - quartos:         # int | None — dormitórios
+    - banheiros:       # int | None — banheiros
+    - vagas:           # int | None — vagas de garagem
+    - tipo:            # str — tipo (apartamento, casa, ...)
+    - descricao:       # str — descrição do anúncio
+    - amenities:       # list[str] — amenities normalizadas
+    - fotos:           # list[str] — URLs das fotos
+    - data_coleta:     # str — ISO timestamp da coleta
+    - data_publicacao: # str | None — data de publicação
+
+  campos_extras:
+    # Campos EmCasa preservados em _extra sem quebrar o schema:
+    - id_original:       # str — UUID original do EmCasa
+    - previousPrice:     # float | None — preço anterior (para detecção de redução)
+    - priceChangePercent: # float | None — % de variação de preço
+    - buildingName:      # str | None — nome do edifício
+    - floor:             # str | None — andar
+    - coordinates:       # [lat, lon] | None — coordenadas geográficas
+    - totalArea:         # float | None — área total (m²)
+    - usableArea:        # float | None — área útil (m²)
+    - buildingAmenities: # list[str] — amenities do edifício
+    - propertyFeatures:  # list[str] — características do imóvel
+    - objectID:          # str | None — ID Algolia
+    - unitKey:           # str | None — chave da unidade
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+cache:
+  enabled: true
+  diretorio: "data/emcasa_cache"  # relativo à raiz do projeto

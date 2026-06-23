@@ -19,9 +19,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Adiciona workspace ao path
-WORKSPACE = Path("/home/higor/.hermes/kanban/boards/imoveis-watchdog/workspaces/t_ed9d796b")
-sys.path.insert(0, str(WORKSPACE))
+# Adiciona skills ao path
+SKILLS_DIR = Path(__file__).parent.parent / "skills" / "detect-duplicates"
+sys.path.insert(0, str(SKILLS_DIR))
 
 from detect_duplicates import (
     MatchResult,

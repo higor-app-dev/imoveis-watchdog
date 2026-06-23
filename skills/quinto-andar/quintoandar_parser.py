@@ -655,8 +655,53 @@ def _normalize_amenity(name: str) -> str:
     return name
 
 
+QUINTOANDAR_IMG_BASE = "https://www.quintoandar.com.br/img/med/"
+
+
+def _normalize_photo_url(url: str) -> str:
+    """Normaliza URL de foto para URL absoluta acessível.
+
+    O QuintoAndar retorna URLs relativas (apenas o nome do arquivo)
+    nos seus dados SSR/API.  A CDN de imagens vive em:
+
+        https://www.quintoandar.com.br/img/{size}/{filename}
+
+    Onde ``size`` = ``med`` é o único tamanho que serve conteúdo
+    actualmente (``large``, ``orig``, etc. retornam 404).
+
+    Estratégia:
+      1. URL já absoluta (http/https) → mantém como está
+      2. Caminho absoluto (/img/...) → prefixa com o domínio
+      3. Apenas nome de arquivo (``originalXXX.jpg``) → prefixa com base
+    """
+    if not url or not isinstance(url, str):
+        return url
+
+    url = url.strip()
+
+    # Já é absoluta
+    if url.startswith("http"):
+        return url
+
+    # Caminho absoluto (ex.: /img/med/foto.jpg)
+    if url.startswith("/"):
+        return f"https://www.quintoandar.com.br{url}"
+
+    # Relativo — só o nome do arquivo (caso mais comum na SSR)
+    return f"{QUINTOANDAR_IMG_BASE}{url}"
+
+
 def _extract_photos(listing: dict) -> list[str]:
-    """Extrai lista de URLs de fotos."""
+    """Extrai lista de URLs absolutas de fotos.
+
+    Fontes testadas (Next.js SSR / API):
+      - ``photos[].url`` — string relativa (ex.: ``original123.jpg``)
+      - ``photos[].src``, ``photos[].image`` (fallback)
+      - ``mainPhoto``, ``coverPhoto``, ``thumbnail`` (como dict ou string)
+
+    Todas as URLs são normalizadas para absolutas via
+    ``_normalize_photo_url()`` e a lista é deduplicada.
+    """
     if not isinstance(listing, dict):
         log_warning("_extract_photos recebeu não-dict")
         return []
@@ -669,31 +714,52 @@ def _extract_photos(listing: dict) -> list[str]:
         or []
     )
 
-    urls = []
+    seen: set[str] = set()
+    urls: list[str] = []
+
+    def _add(url: str | None) -> None:
+        """Adiciona url normalizada, evitando duplicatas."""
+        if not url or not isinstance(url, str):
+            return
+        normalized = _normalize_photo_url(url)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            urls.append(normalized)
+
     if isinstance(photos, list):
         for p in photos:
             if isinstance(p, dict):
-                url = (
-                    _safe_get(p, "url")
-                    or _safe_get(p, "src")
-                    or _safe_get(p, "image")
-                    or _safe_get(p, "largeUrl")
-                    or _safe_get(p, "mediumUrl")
-                    or _safe_get(p, "smallUrl")
-                )
-                if url and isinstance(url, str):
-                    urls.append(url)
-            elif isinstance(p, str) and p.startswith("http"):
-                urls.append(p)
+                # Prioridade: largeUrl > url > mediumUrl > src > image > smallUrl
+                _add(_safe_get(p, "largeUrl"))
+                _add(_safe_get(p, "url"))
+                _add(_safe_get(p, "mediumUrl"))
+                _add(_safe_get(p, "src"))
+                _add(_safe_get(p, "image"))
+                _add(_safe_get(p, "smallUrl"))
+            elif isinstance(p, str):
+                _add(p)
 
-    # Também pode vir como campo url direto
+    # Foto principal / capa (inserida no início)
     main_photo = _safe_get(listing, "mainPhoto") or _safe_get(listing, "coverPhoto") or _safe_get(listing, "thumbnail")
     if isinstance(main_photo, dict):
-        url = _safe_get(main_photo, "url") or _safe_get(main_photo, "src")
-        if url and isinstance(url, str) and url not in urls:
-            urls.insert(0, url)
-    elif isinstance(main_photo, str) and main_photo.startswith("http") and main_photo not in urls:
-        urls.insert(0, main_photo)
+        _add(_safe_get(main_photo, "largeUrl"))
+        _add(_safe_get(main_photo, "url"))
+        _add(_safe_get(main_photo, "src"))
+    elif isinstance(main_photo, str):
+        _add(main_photo)
+
+    # Se adicionamos a main/cover e ela não veio primeiro em urls,
+    # a _add() já a coloca no final via append.  Reordenamos.
+    # A main/cover deve ser a primeira se existir e estiver na lista.
+    if main_photo and urls and len(urls) > 1:
+        main_url = _normalize_photo_url(
+            _safe_get(main_photo, "largeUrl")
+            or _safe_get(main_photo, "url")
+            or _safe_get(main_photo, "src")
+        ) if isinstance(main_photo, dict) else _normalize_photo_url(main_photo)
+        if main_url in seen and urls[0] != main_url:
+            urls.remove(main_url)
+            urls.insert(0, main_url)
 
     return urls
 

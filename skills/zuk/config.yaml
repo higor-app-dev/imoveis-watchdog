@@ -1,0 +1,78 @@
+# Portal Zuk — Configuração de Extração
+# https://portalzuk.com.br
+
+# URL Base
+base_url: "https://www.portalzuk.com.br"
+image_base: "https://imagens.portalzuk.com.br"
+
+# Headers HTTP para bypass Cloudflare
+headers:
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+  Accept-Language: "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+
+# Rotas de listagem
+routes:
+  listing: "/leilao-de-imoveis"
+  listing_uf: "/leilao-de-imoveis/{uf}"
+  listing_cidade: "/leilao-de-imoveis/todos/{uf}/{cidade}"
+  detail: "/imovel/{uf}/{cidade}/{bairro}/{rua}/{leilaoId}-{loteId}"
+
+# Paginação
+pagination:
+  items_per_page: 30
+  param: "page"
+  mode: "query"  # query parameter (?page=N)
+
+# Imagens
+images:
+  pattern: "https://imagens.portalzuk.com.br/{size}/{year}/{month}/{hash}.{ext}"
+  sizes:
+    mini: "thumbnail (~200px, listagem)"
+    detalhe: "full (~800px, página de detalhe)"
+  format: "webp"  # padrão; .jpg usado para og:image
+
+# Campos extraídos por fonte
+fields:
+  html_listagem:
+    - titulo              # .card-property-price-lote
+    - endereco             # .card-property-address (cidade/uf - bairro - rua)
+    - preco_1a_praca       # .card-property-price-value com line-through
+    - preco_2a_praca       # .card-property-price-value sem line-through
+    - data_1a_praca        # .card-property-price-data com line-through
+    - data_2a_praca        # .card-property-price-data sem line-through
+    - percentual_desconto  # .card-property-price-percent
+    - image_url            # img src em .card-property-image-wrapper
+    - link_detalhe         # a href
+
+  inline_properties:
+    - il                   # ID do leilão
+    - ilo                  # ID do lote (chave de correlação)
+    - la / lo              # Latitude / Longitude
+    - lv                   # Valor de avaliação (lançamento)
+    - i_abaixo             # % abaixo da avaliação
+    - a_uti / a_pri / a_con / a_ter / a_tot  # Áreas
+    - i_res / i_com / i_rur / i_ter          # Tipo flags
+
+  html_detalhe:
+    - titulo_completo      # h1.title
+    - endereco_completo    # p.property-address
+    - descricao            # .property-info-text p
+    - matricula            # #itens_matricula
+    - status_ocupacao      # .property-status-title
+    - lances               # .box-action-bid-value
+    - galeria_imagens      # #div_imagens figure img
+    - comitente            # .box-action-bank img[alt]
+
+# Anti-bot
+cloudflare:
+  active: true
+  mitigation: "User-Agent de navegador real necessário. CSRF token para POST."
+
+# Modalidade (inferida)
+modalidade: "online"  # Tem "Participar do leilão" e "Auditório Virtual"
+
+# Cache
+cache:
+  enabled: true
+  ttl_seconds: 300  # 5 min

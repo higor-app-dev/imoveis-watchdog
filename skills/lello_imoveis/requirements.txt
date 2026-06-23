@@ -1,0 +1,6 @@
+# Dependências da Lello Imóveis Skill
+# A extração SSR usa apenas web_extract via Hermes tools + stdlib.
+# Nenhuma dependência externa necessária — este arquivo é um stub.
+#
+# Para testes (opcional):
+# pytest>=7.0

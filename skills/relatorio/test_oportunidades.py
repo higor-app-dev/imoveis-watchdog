@@ -760,3 +760,32 @@ class TestPorFonte:
         d = rel.to_dict()
         assert "por_fonte" in d
         assert d["por_fonte"] == {}
+
+    def test_lello_exibicao_no_texto(self):
+        """Lello Imóveis aparece como 'Lello Imóveis' (lello) no relatório."""
+        items = [
+            ItemOportunidade(
+                id="lello_001", fonte="lello", bairro="Pinheiros",
+                preco=650000.0, endereco="Rua D, 300",
+                url="https://lello.com.br/imovel/001", new_flag=NEW_FLAG_NOVO,
+            ),
+            ItemOportunidade(
+                id="lello_002", fonte="lello", bairro="Vila Olímpia",
+                preco=1200000.0, endereco="Rua E, 200",
+                new_flag=NEW_FLAG_NOVO,
+            ),
+        ]
+        rel = RelatorioOportunidades(items=items)
+
+        # Texto do relatório
+        texto = rel.texto
+        assert "Resumo por Fonte" in texto
+        assert "Lello Imóveis (lello)" in texto
+        assert "Total: 2 | Novos: 2" in texto or "Total: 2 | Novos: 2" in texto
+
+        # JSON
+        d = rel.to_dict()
+        assert "lello" in d["por_fonte"]
+        assert d["por_fonte"]["lello"]["nome_exibicao"] == "Lello Imóveis"
+        assert d["por_fonte"]["lello"]["total"] == 2
+        assert d["por_fonte"]["lello"]["novos"] == 2

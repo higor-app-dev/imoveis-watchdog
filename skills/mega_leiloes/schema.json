@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watchdog.imoveis/schemas/megaleiloes-v1.json",
+  "title": "Mega Leilões — Schema Normalizado de Leilão de Imóveis",
+  "description": "Schema unificado para leilões de imóveis extraídos do Mega Leilões (megaleiloes.com.br) via Algolia API (primary) + enriquecimento SSR (detail page). Compatível com o schema Imovel do watchdog_pipeline via from_mega_listing(). Campos específicos de leilão são preservados em _extra.",
+  "type": "object",
+  "required": ["id", "fonte", "preco_venda", "titulo", "url"],
+
+  "properties": {
+    "": {
+      "description": "--- CAMPOS DO SCHEMA IMOVEL (unificado watchdog_pipeline) ---"
+    },
+
+    "id": {
+      "type": "string",
+      "description": "Identificador único no formato 'megaleiloes_{objectID}'. Composto de fonte + objectID do Algolia.",
+      "examples": ["megaleiloes_MG125449", "megaleiloes_X125449"],
+      "source": "Algolia: hit.objectID → f'{FONTE}_{objectID}'"
+    },
+    "origem_id": {
+      "type": "string",
+      "description": "ID original na fonte (objectID do Algolia). Usado para deduplicação.",
+      "examples": ["MG125449", "X125449"],
+      "source": "Algolia: hit.objectID"
+    },
+    "titulo": {
+      "type": "string",
+      "description": "Título do leilão. Extraído de headline; fallback para auction + subcategory.",
+      "maxLength": 500,
+      "examples": ["Apartamento Duplex 66 m² (01 vaga) - Vila Nova Curuçá - São Paulo - SP"],
+      "source": "Algolia: hit.headline (primary) | hit.auction + hit.subcategory (fallback)",
+      "transformation": "Truncado a 500 caracteres. Se vazio, usa 'Imóvel Mega Leilões' como fallback."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL absoluta para a página de detalhe no Mega Leilões.",
+      "examples": ["https://www.megaleiloes.com.br/imoveis/apartamentos/sp/sao-paulo/apartamento-duplex-66-m2-01-vaga-vila-nova-curuca-sao-paulo-sp-x125449"],
+      "source": "Algolia: hit.url",
+      "transformation": "Se não começa com 'http', prefixa com 'https://www.megaleiloes.com.br'"
+    },
+    "fonte": {
+      "type": "string",
+      "const": "megaleiloes",
+      "description": "Identificador da fonte. Sempre 'megaleiloes'."
+    },
+    "endereco": {
+      "type": "string",
+      "description": "Endereço completo do imóvel (logradouro + número), se disponível no Algolia.",
+      "examples": ["Rua Osório Franco Vilhena, 1301, Vila Nova Curuçá, São Paulo, SP"],
+      "source": "Algolia: hit.address"
+    },
+    "bairro": {
+      "type": "string",
+      "description": "Bairro do imóvel (sublocality no Algolia).",
+      "examples": ["Vila Nova Curuçá"],
+      "source": "Algolia: hit.sublocality"
+    },
+    "cidade": {
+      "type": "string",
+      "description": "Cidade do imóvel.",
+      "examples": ["São Paulo"],
+      "source": "Algolia: hit.city"
+    },
+    "uf": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 2,
+      "description": "UF (sigla do estado), normalizada para maiúsculas.",
+      "examples": ["SP", "RJ", "MG"],
+      "source": "Algolia: hit.state",
+      "transformation": "hit.state.upper()[:2]"
+    },
+    "preco_venda": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor da 1ª praça do leilão em R$ (valor de avaliação / lance mínimo inicial). No contexto de leilão, este campo representa o valor de avaliação (assessment value) e o lance mínimo da 1ª praça.",
+      "examples": [454870.42, 282391.94],
+      "source": "Algolia: hit.first_instance_value (string BR format)",
+      "transformation": "_parse_br_price() → string BR 'R$ 450.000,42' → float 450000.42. None se '0', '0,00' ou string vazia."
+    },
+    "preco_aluguel": {
+      "type": "null",
+      "description": "Não aplicável para leilões. Sempre null."
+    },
+    "condominio": {
+      "type": "null",
+      "description": "Não aplicável para leilões. Sempre null."
+    },
+    "iptu": {
+      "type": "null",
+      "description": "Não aplicável para leilões. Sempre null."
+    },
+    "area": {
+      "type": ["number", "null"],
+      "description": "Área do imóvel em m². Extraída da página de detalhe (SSR), NÃO disponível na Algolia API. Preenchida durante enriquecimento.",
+      "source": "SSR detail page (enriquecimento)"
+    },
+    "quartos": {
+      "type": ["integer", "null"],
+      "description": "Número de quartos. Extraído da página de detalhe (SSR), NÃO disponível na Algolia API. Preenchida durante enriquecimento.",
+      "source": "SSR detail page (enriquecimento)"
+    },
+    "banheiros": {
+      "type": ["integer", "null"],
+      "description": "Número de banheiros. Extraído da página de detalhe (SSR), NÃO disponível na Algolia API. Preenchida durante enriquecimento.",
+      "source": "SSR detail page (enriquecimento)"
+    },
+    "vagas": {
+      "type": ["integer", "null"],
+      "description": "Número de vagas de garagem. Extraído da página de detalhe (SSR), NÃO disponível na Algolia API. Preenchida durante enriquecimento.",
+      "source": "SSR detail page (enriquecimento)"
+    },
+    "tipo": {
+      "type": "string",
+      "description": "Tipo do imóvel, mapeado a partir de subcategory do Algolia via SUBCATEGORY_TIPO_MAP.",
+      "examples": ["apartamento", "casa", "terreno", "comercial", "cobertura", "flat", "kitnet", "sobrado", "studio", "loft", "casa_condominio"],
+      "source": "Algolia: hit.subcategory → SUBCATEGORY_TIPO_MAP",
+      "transformation": "SUBCATEGORY_TIPO_MAP.get(subcategory, 'outro')"
+    },
+    "disponivel": {
+      "type": "boolean",
+      "description": "True se o leilão está ativo (batch_status 0=upcoming ou 1=open). False se suspenso (batch_status 3).",
+      "source": "Algolia: hit.batch_status → 0/1=True, 3=False"
+    },
+    "status": {
+      "type": "string",
+      "description": "Status textual do leilão mapeado de batch_status: 0='upcoming', 1='ativo', 3='suspenso'.",
+      "enum": ["upcoming", "ativo", "suspenso", "encerrado"],
+      "source": "Algolia: hit.batch_status → mapping",
+      "transformation": "batch_status=0 → 'upcoming', batch_status=1 → 'ativo', batch_status=3 → 'suspenso'"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descrição textual construída a partir de metadados do leilão (tipo, processo, foro, datas, valores, lote).",
+      "source": "Constructed from auction metadata fields",
+      "transformation": "Concatena tipo_leilao, process_number, forum, data_leilao_inicio, data_segunda_praca, first_instance_value_raw, batch separados por ' | '"
+    },
+    "amenities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tags geradas a partir de subcategory e tipo_leilao. Mega Leilões não fornece amenities de condomínio.",
+      "source": "Constructed from subcategory + tipo_leilao",
+      "transformation": "[subcategory.lower(), tipo_leilao.lower()]"
+    },
+    "fotos": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://cdn1\\.megaleiloes\\.com\\.br/batches/\\d+/[a-f0-9]{32}_\\d+x\\d+\\.jpg$"
+      },
+      "description": "URLs das fotos do imóvel no CDN da Mega Leilões. Convertidas de thumbnail (320×240) para resolução média (670×380). 3 resoluções disponíveis para cada imagem: 320×240 (thumbnail), 670×380 (carrossel), 1024×768 (lightbox). NOTA: A API Algolia retorna apenas 1 imagem por lote via image_path. A página SSR de detalhe pode conter múltiplas imagens (2-5+ hashes md5 únicos), mas o image_path do Algolia NÃO corresponde necessariamente à primeira imagem da galeria — é um hash arbitrário. Para obter todas as imagens, é necessário scraping da página SSR (requer bypass Cloudflare).",
+      "source": "Algolia: hit.image_path → _get_medium_res_image()",
+      "transformation": "hit.image_path.replace('_320x240.jpg', '_670x380.jpg'). Para full (1024×768): usar _build_image_url(batch_id, md5, size=1024). Múltiplas fotos requerem detail page (SSR) — Algolia retorna apenas 1 foto."
+    },
+    "image_path_original": {
+      "type": ["string", "null"],
+      "description": "URL original da thumbnail (320×240) retornada pelo Algolia. Campo interno preservado para referência.",
+      "source": "Algolia: hit.image_path"
+    },
+    "data_coleta": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de quando os dados foram coletados (UTC). Preenchido automaticamente na conversão.",
+      "source": "Auto: datetime.now(timezone.utc).isoformat()"
+    },
+    "data_publicacao": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Não disponível no Algolia Mega Leilões. Sempre null."
+    },
+
+    "": {
+      "description": "--- CAMPOS ESPECÍFICOS DE LEILÃO (preservados em _extra / campos estendidos) ---"
+    },
+
+    "first_instance_value_raw": {
+      "type": "string",
+      "description": "Valor da 1ª praça (avaliação) em formato string BR original. Preservado para auditoria.",
+      "examples": ["R$ 454.870,42", "R$ 1.200.000,00"],
+      "source": "Algolia: hit.first_instance_value (string raw)"
+    },
+    "second_instance_value": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor da 2ª praça do leilão em R$. A segunda praça geralmente tem desconto sobre a avaliação.",
+      "examples": [282391.94],
+      "source": "Algolia: hit.second_instance_value (string BR format)",
+      "transformation": "Mesma _parse_br_price() que preco_venda"
+    },
+    "third_instance_value": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor da 3ª praça do leilão em R$ (se aplicável). Raro.",
+      "source": "Algolia: hit.third_instance_value (string BR format)",
+      "transformation": "Mesma _parse_br_price() que preco_venda"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Moeda do leilão. Normalmente 'R$' ou 'US$'.",
+      "default": "R$",
+      "source": "Algolia: hit.currency"
+    },
+    "data_leilao_inicio": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Data/hora de início da 1ª praça do leilão em ISO 8601 (UTC). Converte Unix timestamp (seconds) para ISO.",
+      "examples": ["2026-06-22T10:01:00+00:00"],
+      "source": "Algolia: hit.first_instance_date_start (Unix timestamp seconds)",
+      "transformation": "datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()"
+    },
+    "data_leilao_fim": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Data/hora de encerramento da 1ª praça do leilão em ISO 8601 (UTC).",
+      "source": "Algolia: hit.first_instance_date_end (Unix timestamp seconds)"
+    },
+    "data_segunda_praca": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Data/hora de encerramento da 2ª praça do leilão em ISO 8601 (UTC).",
+      "source": "Algolia: hit.second_instance_date_end (Unix timestamp seconds)"
+    },
+    "tipo_leilao": {
+      "type": "string",
+      "description": "Tipo do leilão: Judicial ou Extrajudicial (alienação fiduciária / venda direta).",
+      "examples": ["Extrajudicial", "Judicial"],
+      "source": "Algolia: hit.type"
+    },
+    "ref_code": {
+      "type": "string",
+      "description": "Código de referência do lote (ex: X125449, J124983). Prefixo indica tipo: X=Extrajudicial, J=Judicial, ML=Grupo de leilão.",
+      "examples": ["X125449", "J124983", "ML34017"],
+      "source": "Derivado de hit.objectID",
+      "transformation": "O objectID do Algolia geralmente contém o código de referência. Extrair parte após prefixo de categoria."
+    },
+    "batch": {
+      "type": "string",
+      "description": "Número do lote dentro do leilão (ex: 'LOTE 2', 'LOTE ÚNICO').",
+      "examples": ["LOTE 2"],
+      "source": "Algolia: hit.batch"
+    },
+    "batch_id": {
+      "type": ["integer", "null"],
+      "description": "ID numérico do lote no sistema Mega Leilões. Usado para construir URLs de imagens e documentos no CDN.",
+      "source": "Algolia: hit.batch_id"
+    },
+    "batch_status": {
+      "type": "integer",
+      "description": "Status numérico do lote: 0=upcoming (em breve), 1=open (aberto para lances), 3=suspended (suspenso).",
+      "enum": [0, 1, 3],
+      "source": "Algolia: hit.batch_status"
+    },
+    "status_leilao": {
+      "type": "string",
+      "description": "Label textual do status do lote: 'upcoming', 'open', 'suspended'.",
+      "enum": ["upcoming", "open", "suspended"],
+      "source": "Algolia: hit.batch_status → label mapping"
+    },
+    "process_number": {
+      "type": "string",
+      "description": "Número do processo judicial (se aplicável).",
+      "examples": ["1001234-56.2026.8.26.0100"],
+      "source": "Algolia: hit.process_number"
+    },
+    "forum": {
+      "type": "string",
+      "description": "Foro / Vara responsável pelo processo.",
+      "examples": ["1ª Vara Cível de São Paulo"],
+      "source": "Algolia: hit.forum"
+    },
+    "author": {
+      "type": "string",
+      "description": "Autor do processo (exequente / requerente).",
+      "source": "Algolia: hit.author"
+    },
+    "respondent": {
+      "type": "string",
+      "description": "Réu / Executado no processo.",
+      "source": "Algolia: hit.respondent"
+    },
+    "constituent": {
+      "type": "string",
+      "description": "Comitente / vendedor do imóvel (ex: banco, instituição financeira).",
+      "examples": ["BANCO SANTANDER S.A.", "CAIXA ECONÔMICA FEDERAL"],
+      "source": "Algolia: hit.constituent"
+    },
+    "rating": {
+      "type": ["integer", "null"],
+      "description": "Nota/avaliação do imóvel no Mega Leilões (0-5 estrelas).",
+      "minimum": 0,
+      "maximum": 5,
+      "source": "Algolia: hit.rating"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Subcategoria do imóvel no Algolia. Usada para mapear tipo Imovel.",
+      "examples": ["Apartamentos", "Casas", "Terrenos e Lotes"],
+      "source": "Algolia: hit.subcategory"
+    },
+    "auction": {
+      "type": "string",
+      "description": "Nome do leilão (agrupa múltiplos lotes).",
+      "source": "Algolia: hit.auction"
+    },
+    "auction_id": {
+      "type": ["integer", "null"],
+      "description": "ID do leilão no Algolia. Múltiplos lotes podem compartilhar o mesmo auction_id.",
+      "source": "Algolia: hit.auction_id"
+    },
+    "auction_headline": {
+      "type": "string",
+      "description": "Título do leilão (geralmente igual para todos os lotes do mesmo grupo).",
+      "source": "Algolia: hit.auction_headline"
+    },
+
+    "": {
+      "description": "--- CAMPOS DISPONÍVEIS APENAS VIA SSR (página de detalhe — enriquecimento) ---"
+    },
+
+    "incremento": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor do incremento mínimo entre lances (em R$). Disponível apenas na página de detalhe (SSR), NÃO na Algolia API.",
+      "examples": [20000.0, 5000.0],
+      "source": "SSR detail page (a extrair do HTML)",
+      "notes": "Requer enriquecimento via scraping da página de detalhe. Seletor HTML típico: elemento com texto 'Incremento:' ou similar."
+    },
+    "comissao_leiloeiro": {
+      "type": ["number", "null"],
+      "description": "Comissão do leiloeiro (percentual ou valor fixo). Disponível apenas na página de detalhe (SSR), NÃO na Algolia API.",
+      "examples": [5.0, 5000.0],
+      "source": "SSR detail page (a extrair do HTML)",
+      "notes": "Requer enriquecimento via scraping da página de detalhe. Pode ser percentual (%) ou valor fixo em R$."
+    },
+    "leiloeiro": {
+      "type": ["string", "null"],
+      "description": "Nome do leiloeiro responsável. Disponível apenas na página de detalhe (SSR).",
+      "examples": ["Dr. João Silva - JUCESP 123"],
+      "source": "SSR detail page (a extrair do HTML)"
+    },
+    "edital_url": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "URL do edital do leilão em PDF no CDN. Construída a partir de batch_id + ref_code.",
+      "pattern": "^https://cdn1\\.megaleiloes\\.com\\.br/batches/\\d+/megaleiloes_edital_.*\\.pdf$",
+      "source": "SSR detail page (a extrair do HTML) | HREF do link do edital",
+      "notes": "Padrão: https://cdn1.megaleiloes.com.br/batches/{batch_id}/megaleiloes_edital_{refcode}_{datecode}.pdf"
+    },
+    "matricula_url": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "URL da matrícula do imóvel em PDF no CDN. Construída a partir de batch_id + ref_code.",
+      "pattern": "^https://cdn1\\.megaleiloes\\.com\\.br/batches/\\d+/megaleiloes_matricula_.*\\.pdf$",
+      "source": "SSR detail page (a extrair do HTML) | HREF do link da matrícula",
+      "notes": "Padrão: https://cdn1.megaleiloes.com.br/batches/{batch_id}/megaleiloes_matricula_{refcode}_{datecode}.pdf"
+    },
+    "visitas": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de visitas ao anúncio. Disponível apenas na página de detalhe (SSR).",
+      "source": "SSR detail page (a extrair do HTML)"
+    },
+    "habilitados": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de participantes habilitados para dar lances. Disponível apenas na página de detalhe (SSR).",
+      "source": "SSR detail page (a extrair do HTML)"
+    },
+    "qtd_lances": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de lances já registrados. Disponível apenas na página de detalhe (SSR).",
+      "source": "SSR detail page (a extrair do HTML)"
+    },
+    "desconto_pct": {
+      "type": ["number", "null"],
+      "description": "Percentual de desconto na 2ª praça em relação ao valor de avaliação. Disponível apenas na página de detalhe (SSR).",
+      "examples": [38, 50],
+      "source": "SSR detail page (a extrair do HTML)",
+      "notes": "Exemplo: '38% ABAIXO NA 2ª PRAÇA' → 38.0"
+    }
+  },
+
+  "allOf": [
+    {
+      "description": "Validação condicional: se batch_status=0 (upcoming), disponivel=True e status='upcoming'",
+      "if": {
+        "properties": { "batch_status": { "const": 0 } }
+      },
+      "then": {
+        "properties": {
+          "disponivel": { "const": true },
+          "status": { "const": "upcoming" }
+        }
+      }
+    },
+    {
+      "description": "Validação condicional: se batch_status=1 (open), disponivel=True e status='ativo'",
+      "if": {
+        "properties": { "batch_status": { "const": 1 } }
+      },
+      "then": {
+        "properties": {
+          "disponivel": { "const": true },
+          "status": { "const": "ativo" }
+        }
+      }
+    },
+    {
+      "description": "Validação condicional: se batch_status=3 (suspended), disponivel=False e status='suspenso'",
+      "if": {
+        "properties": { "batch_status": { "const": 3 } }
+      },
+      "then": {
+        "properties": {
+          "disponivel": { "const": false },
+          "status": { "const": "suspenso" }
+        }
+      }
+    }
+  ],
+
+  "defs": {
+    "ImovelCoreFields": {
+      "description": "Campos obrigatórios do schema Imovel unificado que são preenchidos pelo parser Mega Leilões.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/properties/id" },
+        "titulo": { "$ref": "#/properties/titulo" },
+        "url": { "$ref": "#/properties/url" },
+        "fonte": { "$ref": "#/properties/fonte" },
+        "preco_venda": { "$ref": "#/properties/preco_venda" },
+        "tipo": { "$ref": "#/properties/tipo" },
+        "endereco": { "$ref": "#/properties/endereco" },
+        "bairro": { "$ref": "#/properties/bairro" },
+        "cidade": { "$ref": "#/properties/cidade" },
+        "uf": { "$ref": "#/properties/uf" },
+        "fotos": { "$ref": "#/properties/fotos" },
+        "disponivel": { "$ref": "#/properties/disponivel" },
+        "status": { "$ref": "#/properties/status" },
+        "descricao": { "$ref": "#/properties/descricao" },
+        "data_coleta": { "$ref": "#/properties/data_coleta" }
+      }
+    },
+    "FieldSourceMapping": {
+      "description": "Mapeamento completo: Algolia field → Imovel field → Mega Leilões campo de negócio.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "campo_negocio": { "type": "string", "description": "Nome do campo no contexto de negócio (leilão)" },
+          "algolia_field": { "type": "string", "description": "Nome do campo no hit do Algolia API" },
+          "imovel_field": { "type": "string", "description": "Nome do campo no schema Imovel unificado" },
+          "tipo": { "type": "string", "description": "Tipo do campo" },
+          "obrigatorio": { "type": "boolean", "description": "Se o campo é obrigatório no schema" },
+          "transformacao": { "type": "string", "description": "Regra de transformação aplicada" },
+          "fonte": { "type": "string", "description": "Fonte de dados: Algolia API | SSR detail | constructed" }
+        },
+        "required": ["campo_negocio", "algolia_field", "imovel_field", "tipo", "fonte"]
+      },
+      "examples": [
+        [
+          { "campo_negocio": "título (title)", "algolia_field": "headline", "imovel_field": "titulo", "tipo": "string", "obrigatorio": true, "transformacao": "Truncado a 500 chars; fallback para auction + subcategory", "fonte": "Algolia API" },
+          { "campo_negocio": "endereço (address)", "algolia_field": "address", "imovel_field": "endereco", "tipo": "string", "obrigatorio": false, "transformacao": "Uso direto", "fonte": "Algolia API" },
+          { "campo_negocio": "valor de avaliação (assessment value)", "algolia_field": "first_instance_value", "imovel_field": "preco_venda", "tipo": "float", "obrigatorio": true, "transformacao": "_parse_br_price(): string BR 'R$ 450.000,42' → float 450000.42", "fonte": "Algolia API" },
+          { "campo_negocio": "lance mínimo (minimum bid)", "algolia_field": "first_instance_value", "imovel_field": "preco_venda", "tipo": "float", "obrigatorio": true, "transformacao": "Idêntico ao valor de avaliação. Na 1ª praça, lance mínimo = valor de avaliação.", "fonte": "Algolia API" },
+          { "campo_negocio": "data do leilão - 1ª praça início (auction date)", "algolia_field": "first_instance_date_start", "imovel_field": "data_leilao_inicio", "tipo": "ISO datetime", "obrigatorio": false, "transformacao": "Unix timestamp (seconds) → ISO 8601 UTC", "fonte": "Algolia API" },
+          { "campo_negocio": "data do leilão - 1ª praça fim (auction end)", "algolia_field": "first_instance_date_end", "imovel_field": "data_leilao_fim", "tipo": "ISO datetime", "obrigatorio": false, "transformacao": "Unix timestamp (seconds) → ISO 8601 UTC", "fonte": "Algolia API" },
+          { "campo_negocio": "data do leilão - 2ª praça fim (second auction end)", "algolia_field": "second_instance_date_end", "imovel_field": "data_segunda_praca", "tipo": "ISO datetime", "obrigatorio": false, "transformacao": "Unix timestamp (seconds) → ISO 8601 UTC", "fonte": "Algolia API" },
+          { "campo_negocio": "incremento (increment)", "algolia_field": "N/A", "imovel_field": "incremento", "tipo": "float", "obrigatorio": false, "transformacao": "A extrair do HTML da página de detalhe (SSR)", "fonte": "SSR detail page" },
+          { "campo_negocio": "comissão do leiloeiro (auctioneer commission)", "algolia_field": "N/A", "imovel_field": "comissao_leiloeiro", "tipo": "float", "obrigatorio": false, "transformacao": "A extrair do HTML da página de detalhe (SSR). Pode ser percentual (%) ou valor fixo.", "fonte": "SSR detail page" },
+          { "campo_negocio": "URLs das imagens (image URLs)", "algolia_field": "image_path", "imovel_field": "fotos", "tipo": "array[string]", "obrigatorio": false, "transformacao": "hit.image_path.replace('_320x240.jpg', '_670x380.jpg') → URL 670×380 HD. Múltiplas fotos requerem SSR.", "fonte": "Algolia API / SSR detail page" }
+        ]
+      ]
+    }
+  }
+}

@@ -32,50 +32,36 @@ cp .env.example .env   # edit with your tokens
 
 ## Project Layout
 
-```
-imoveis-watchdog/
-├── .hermes-skills/       # Hermes Agent skills versionadas
-├── mcp/                  # MCP server configs versionadas
-├── config/
-│   └── targets.yaml      # Portal search targets
-├── data/
-│   ├── .gitkeep          # Scraped outputs (gitignored)
-│   └── results/          # Execution results with timestamps
-├── scrapers/
-│   └── loft/             # Playwright-based Loft scraper
-├── skills/
-│   ├── quinto-andar/     # QuintoAndar parser + tests
-│   ├── loft/             # Loft parser
-│   └── watchdog/         # Pipeline orchestration
-├── tests/
-│   ├── test_data.json    # Mock data for CI tests
-│   └── test_extraction.py # CI extraction validation
-├── watchdog_pipeline.py  # Main pipeline
-├── watchdog_config.py    # Config loader
-└── watchdog.yaml         # Main config
-```
+| Path | Descrição |
+|------|-----------|
+| `.hermes-skills/` | Hermes Agent skills versionadas |
+| `config/` | Alvos de busca configuráveis (YAML/JSON) |
+| `data/` | Resultados das execuções (JSON) |
+| `mcp/` | Configurações MCP versionadas |
+| `scrapers/` | Scrapers especializados (Loft com Playwright + stealth) |
+| `scripts/` | Scripts auxiliares |
+| `skills/` | Skills de extração (Sodré Santoro, Zuk, QuintoAndar, Loft, etc.) |
+| `tests/` | Testes |
 
 ## Workflow: Adding a New Portal Skill
 
 1. **Create skill directory** — `skills/<portal-name>/`
-2. **Write the parser** — Python script that normalizes listings to the unified schema (see `skills/quinto-andar/quintoandar_parser.py` for reference schema: `list_id`, `title`, `url`, `price`, `price_raw`, `category`, `neighbourhood`, `municipality`, `uf`, `area_m2`, `rooms`, `bathrooms`)
-3. **Add SKILL.md** — Describe the extraction approach, API endpoints used, known quirks
-4. **Register in targets.yaml** — Add portal config under its name in `config/targets.yaml`
-5. **Update watchdog_config.py** — Wire the new portal into the pipeline's portal registry
-6. **Write tests** — At minimum add mock data and a test script in `tests/`
+2. **Write the parser** — Python script that normalizes listings to the unified schema
+3. **Add SKILL.md** — Describe extraction approach, API endpoints, known quirks
+4. **Register in `config/portals.yaml`** — Add portal entry under `portals:`
+5. **Register in `config/targets.yaml`** — Add search targets
+6. **Write tests** — At minimum add unit tests in `skills/<portal>/test_*.py`
 7. **Commit** — Use conventional commit format: `feat: add <portal> parser and integration`
 
 ## Running Tests
 
 ```bash
-# Mock data extraction test (CI-compatible)
-python tests/test_extraction.py
-
 # Individual portal parser tests
+python skills/sodre_santoro/test_sodre_santoro_parser.py
 python skills/quinto-andar/test_quintoandar_parser.py
 
-# Run all tests
-python -m pytest tests/
+# All tests
+python -m pytest tests/ skills/*/test_*.py
 ```
 
 ## Running the Pipeline

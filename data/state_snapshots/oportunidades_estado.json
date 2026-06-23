@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-06-21T22:31:51.087971+00:00",
+  "total": 2,
+  "imoveis": [
+    {
+      "id": "qa_001",
+      "endereco": "Rua Augusta, 500",
+      "bairro": "Consolação",
+      "preco": 350000.0,
+      "preco_formatado": "R$ 350.000",
+      "area": 45.0,
+      "portais": [
+        "quintoandar"
+      ],
+      "url": "",
+      "new_flag": "EXISTENTE",
+      "fonte": "quintoandar",
+      "data_coleta": ""
+    },
+    {
+      "id": "loft_002",
+      "endereco": "Rua dos Pinheiros, 100",
+      "bairro": "Pinheiros",
+      "preco": 800000.0,
+      "preco_formatado": "R$ 800.000",
+      "area": 80.0,
+      "portais": [
+        "loft"
+      ],
+      "url": "",
+      "new_flag": "NOVO",
+      "fonte": "loft",
+      "data_coleta": ""
+    }
+  ]
+}

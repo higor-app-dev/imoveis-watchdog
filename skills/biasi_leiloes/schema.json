@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watchdog.imoveis/schemas/biasileiloes-v1.json",
+  "title": "Biasi Leilões — Schema Normalizado de Leilão de Imóveis",
+  "description": "Schema unificado para leilões de imóveis extraídos do Biasi Leilões (biasileiloes.com.br) via AJAX SSR listing + SSR detail scraping. Compatível com o schema Imovel do watchdog_pipeline via from_biasi_listing(). Campos específicos de leilão são preservados como campos extras no mesmo nível.",
+  "type": "object",
+  "required": ["id", "fonte", "titulo", "url"],
+
+  "properties": {
+    "": {
+      "description": "--- CAMPOS DO SCHEMA IMOVEL (unificado watchdog_pipeline) ---"
+    },
+
+    "id": {
+      "type": "string",
+      "description": "Identificador único do anúncio. Extraído do data-id do card HTML ou construído como 'biasi_{lote}'.",
+      "examples": ["57352", "biasi_001"],
+      "source": "Card data-id → str(id)"
+    },
+    "origem_id": {
+      "type": ["string", "null"],
+      "description": "ID original na fonte. Usado para deduplicação.",
+      "source": "raw.get('origem_id')"
+    },
+    "titulo": {
+      "type": "string",
+      "description": "Título completo do imóvel em leilão.",
+      "examples": ["Apartamento no \"Condomínio Residencial Alto do Rosolén 2\" - Vila Ipê - Hortolândia/SP"],
+      "source": "Card HTML: .card-title ou detail: titulo"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL absoluta para a página de detalhe no Biasi Leilões.",
+      "examples": ["https://www.biasileiloes.com.br/sale/detail?id=57352"],
+      "source": "Construído: BASE_URL + '/sale/detail?id={id}'"
+    },
+    "fonte": {
+      "type": "string",
+      "const": "biasileiloes",
+      "description": "Identificador da fonte. Sempre 'biasileiloes'."
+    },
+    "status": {
+      "type": "string",
+      "description": "Status textual do leilão em Português. Valores observados: Liberado para Lance, Não Iniciado, Vendido, Removido.",
+      "examples": ["Liberado para Lance", "Não Iniciado", "Vendido"],
+      "source": "Card badge/texto de status"
+    },
+    "disponivel": {
+      "type": "boolean",
+      "description": "True se o anúncio está ativo (status não contém 'vendido', 'removido', 'cancelado', 'inativo').",
+      "source": "Inferido de status"
+    },
+    "descricao": {
+      "type": "string",
+      "description": "Descrição textual completa do imóvel, extraída da página de detalhe.",
+      "source": "Detail: div.descricao ou section#descricao"
+    },
+    "endereco": {
+      "type": "string",
+      "description": "Logradouro + número do imóvel.",
+      "examples": ["Rua Clóvis Lordano, 140"],
+      "source": "Detail: endereco completo"
+    },
+    "bairro": {
+      "type": "string",
+      "description": "Bairro do imóvel.",
+      "examples": ["Núcleo Santa Isabel"],
+      "source": "Detail: bairro"
+    },
+    "cidade": {
+      "type": "string",
+      "description": "Cidade do imóvel.",
+      "examples": ["Hortolândia", "São Paulo", "Ribeirão Preto"],
+      "source": "Detail: cidade (primary) | título (fallback: texto antes de /UF)"
+    },
+    "uf": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 2,
+      "description": "UF (sigla do estado), normalizada para maiúsculas.",
+      "examples": ["SP", "RJ", "MG", "MT", "PR"],
+      "source": "Detail: uf | título: /UF no final"
+    },
+    "cep": {
+      "type": ["string", "null"],
+      "description": "CEP do imóvel, se disponível.",
+      "source": "Detail: cep"
+    },
+    "tipo": {
+      "type": "string",
+      "description": "Tipo do imóvel inferido do título/descrição. Valores comuns: apartamento, casa, terreno, kitnet, cobertura, studio, flat, loft, sobrado, comercial, casa_condominio.",
+      "examples": ["apartamento", "casa", "terreno"],
+      "source": "Detail: tipo_imovel (primary) | _infer_tipo() do título/descrição (fallback)"
+    },
+    "preco_venda": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor da 1ª praça do leilão em R$ (valor de avaliação / lance mínimo inicial).",
+      "examples": [329040.7, 226555.81],
+      "source": "Detail: valor_primeira_praca (string BR) | Card: preco",
+      "transformation": "_parse_money_br() → string BR 'R$ 329.040,70' → float 329040.7"
+    },
+    "preco_segundo_leilao": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Valor da 2ª praça do leilão em R$. Normalmente 60-70% do valor da 1ª praça.",
+      "examples": [226555.81],
+      "source": "Detail: valor_segunda_praca (string BR)",
+      "transformation": "_parse_money_br()"
+    },
+    "preco_anterior": {
+      "type": ["number", "null"],
+      "description": "Preço anterior (se houve redução). null se não informado.",
+      "source": "Detail: raw.get('preco_anterior')"
+    },
+    "area": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Área útil do imóvel em m².",
+      "examples": [73.76],
+      "source": "Detail: area_text (ex: '73,76 m²') | _parse_area_text()"
+    },
+    "quartos": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de quartos.",
+      "examples": [3],
+      "source": "Detail: quartos"
+    },
+    "banheiros": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de banheiros.",
+      "source": "Detail: banheiros"
+    },
+    "vagas": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Número de vagas de garagem.",
+      "examples": [1],
+      "source": "Detail: vagas (primary) | _extract_vagas_text(descricao) (fallback)"
+    },
+    "agencia": {
+      "type": "string",
+      "description": "Agência/imobiliária responsável (Biasi Leilões).",
+      "source": "raw.get('agencia')"
+    },
+    "fotos": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "URLs das fotos do anúncio via CDN Biasi. Tamanho padrão: 1000px.",
+      "examples": ["https://cdn-biasi.blueintra.com/images/lot/15/62/1000/1562647.jpg"],
+      "source": "CDN: cdn-biasi.blueintra.com/images/lot/{XX}/{YY}/{size}/{imageId}.jpg"
+    },
+    "image_urls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "original": { "type": "string", "format": "uri", "description": "URL original em 1000px" },
+          "large": { "type": "string", "format": "uri", "description": "URL em 1000px (mesmo que original)" },
+          "medium": { "type": "string", "format": "uri", "description": "URL em 500px" },
+          "thumb": { "type": "string", "format": "uri", "description": "URL em 250px" }
+        }
+      },
+      "description": "Array estruturado de fotos com todas as resoluções disponíveis (original/large/medium/thumb). Gerado por _generate_all_resolutions().",
+      "examples": [[{"original": "https://cdn-biasi.blueintra.com/images/lot/15/62/1000/1562647.jpg", "large": "https://cdn-biasi.blueintra.com/images/lot/15/62/1000/1562647.jpg", "medium": "https://cdn-biasi.blueintra.com/images/lot/15/62/500/1562647.jpg", "thumb": "https://cdn-biasi.blueintra.com/images/lot/15/62/250/1562647.jpg"}]],
+      "source": "_generate_all_resolutions(foto_url) sobre array fotos[]"
+    },
+    "amenities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de comodidades/amenities do imóvel ou condomínio.",
+      "source": "Detail: raw.get('amenities') | raw.get('comodidades')"
+    },
+    "data_coleta": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de quando os dados foram coletados. Preenchido automaticamente."
+    },
+    "data_publicacao": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de publicação do anúncio, se informado."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 de criação do registro no sistema."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp ISO 8601 da última atualização do registro."
+    },
+
+    "": {
+      "description": "--- CAMPOS ESPECÍFICOS DE LEILÃO (extraídos da página de detalhe, preservados além do schema Imovel) ---"
+    },
+
+    "nome_leilao": {
+      "type": "string",
+      "description": "Nome do evento de leilão. Exibe o conjunto de lotes sendo leiloados.",
+      "examples": ["> 1º Leilão | 04 Imóveis Residenciais em: Hortolândia/SP, Sinop/MT, Ribeirão Preto/SP e Curitiba/PR"]
+    },
+    "numero_lote": {
+      "type": "string",
+      "description": "Número do lote dentro do leilão.",
+      "examples": ["Lote 001"]
+    },
+    "leilao_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL da página do leilão (agregação de lotes).",
+      "examples": ["https://www.biasileiloes.com.br/leilao/12345/nome-leilao"]
+    },
+    "data_primeiro_leilao": {
+      "type": "string",
+      "description": "Data da 1ª praça do leilão, convertida para ISO 8601.",
+      "source": "Detail: data_primeiro_leilao (formato BR: dd/mm/aaaa) → ISO"
+    },
+    "data_segundo_leilao": {
+      "type": "string",
+      "description": "Data da 2ª praça do leilão, convertida para ISO 8601.",
+      "source": "Detail: data_segundo_leilao (formato BR: dd/mm/aaaa) → ISO"
+    },
+    "ocupacao": {
+      "type": "string",
+      "description": "Estado de ocupação do imóvel. Valores comuns: 'desocupado', 'ocupado'.",
+      "source": "Detail: ocupacao"
+    },
+    "cadastro_municipal": {
+      "type": "string",
+      "description": "Inscrição municipal / SQL do imóvel.",
+      "source": "Detail: cadastro_municipal"
+    },
+    "matricula": {
+      "type": "string",
+      "description": "Número da matrícula do imóvel no cartório de registro.",
+      "examples": ["174.947"],
+      "source": "Detail: matricula"
+    },
+    "edital_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL do PDF do edital do leilão.",
+      "examples": ["https://cdn-biasi.blueintra.com/file/loteanexo/57352/129297.pdf"],
+      "source": "Detail: edital_url (CDN de documentos)"
+    },
+    "whatsapp": {
+      "type": "string",
+      "description": "Número de WhatsApp para contato sobre o leilão.",
+      "source": "Detail: whatsapp"
+    },
+
+    "": {
+      "description": "--- CAMPOS ESPECÍFICOS DE VEÍCULOS (quando aplicável, filtrados por categoria) ---"
+    },
+
+    "placa": { "type": "string", "description": "Placa do veículo (quando aplicável)." },
+    "ano_fabricacao": { "type": "string", "description": "Ano de fabricação do veículo." },
+    "km": { "type": "string", "description": "Quilometragem do veículo." }
+  }
+}

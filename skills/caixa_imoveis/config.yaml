@@ -1,0 +1,257 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Caixa Imóveis — Configuração do Site
+# ──────────────────────────────────────────────────────────────────────────────
+# Portal: venda-imoveis.caixa.gov.br
+# Tecnologia: IIS 10.0 + ASP Classic + Azion CDN
+# Anti-Bot: Radware Bot Manager + hCaptcha (protege /sistema/*, exceto /fotos/)
+# ──────────────────────────────────────────────────────────────────────────────
+
+site:
+  name: "Caixa Imóveis"
+  domain: "venda-imoveis.caixa.gov.br"
+  base_url: "https://venda-imoveis.caixa.gov.br"
+  search_base: "https://venda-imoveis.caixa.gov.br/sistema"
+  fonte: "caixa"
+  tecnologia: "IIS 10.0 + ASP Classic + Azion CDN"
+  anti_bot: "Radware Bot Manager + hCaptcha"
+
+endpoints:
+  # ── Protegidos (requerem bypass de Radware) ────────────────────────────
+  busca_imovel:
+    path: "/sistema/busca-imovel.asp"
+    method: POST
+    params:
+      hdnEstado: str
+      hdnLocalidade: str
+      hdnNumTipoVenda: int
+      bairro: str
+      tipo: str
+      quartos: int
+      area: float
+      valor: float
+      CPF: str
+      email: str
+      telefone: str
+    protected: true
+
+  carrega_lista:
+    path: "/sistema/carregaListaImoveis.asp"
+    method: POST
+    protected: true
+
+  detalhe_imovel:
+    path: "/sistema/detalhe-imovel.asp"
+    method: GET
+    params:
+      hdnOrigem: "index"
+      hdnimovel: str  # realEstateRegistration
+    protected: true
+
+  download_lista:
+    path: "/sistema/download-lista.asp"
+    method: POST
+    protected: true
+
+  busca_licitacoes:
+    path: "/sistema/busca-licitacoes.asp"
+    method: GET
+    params:
+      sltTipoBusca: "licitacoes"
+    protected: true
+
+  resultado_licitacoes:
+    path: "/sistema/resultado-licitacoes.asp"
+    method: GET
+    params:
+      sltTipoBusca: "resultados"
+    protected: true
+
+  venda_online:
+    path: "/sistema/venda-online/index.asp"
+    method: GET
+    params:
+      hdnimovel: str
+    protected: true
+
+  # ── Sem proteção (acessíveis diretamente) ──────────────────────────────
+  fotos:
+    path: "/fotos/F{propertyDigits}.jpg"
+    method: GET
+    protected: false
+    description: "Imagens via Azion CDN — sem CAPTCHA"
+
+  editais:
+    path: "/editais/{filename}.PDF"
+    method: GET
+    protected: false
+    description: "Editais públicos via Azion CDN — sem CAPTCHA"
+
+  matricula:
+    path: "/editais/matricula/{uf}/{registrationNumber}.pdf"
+    method: GET
+    protected: true
+    description: "Matrículas protegidas por Radware"
+
+# ── Modalidades de Venda ──────────────────────────────────────────────────────
+modalidades:
+  4:
+    nome: "1º Leilão SFI"
+    tipo: "leilao"
+    descricao: "Primeiro leilão do Sistema de Financiamento Imobiliário"
+  5:
+    nome: "2º Leilão SFI"
+    tipo: "leilao"
+    descricao: "Segundo leilão do Sistema de Financiamento Imobiliário"
+  2:
+    nome: "Concorrência Pública"
+    tipo: "leilao"
+    descricao: "Concorrência pública"
+  14:
+    nome: "Leilão SFI - Edital Único"
+    tipo: "leilao"
+    descricao: "Leilão SFI com Edital Único"
+  21:
+    nome: "Licitação Aberta"
+    tipo: "leilao"
+    descricao: "Licitação aberta"
+  33:
+    nome: "Venda Online"
+    tipo: "venda_direta"
+    descricao: "Venda direta online (sem leilão)"
+  34:
+    nome: "Venda Direta Online"
+    tipo: "venda_direta"
+    descricao: "Venda direta online"
+  9:
+    nome: "Venda Direta FAR"
+    tipo: "venda_direta"
+    descricao: "Venda direta FAR (Fundo de Arrendamento Residencial)"
+
+# ── Agrupamento de tipos ────────────────────────────────────────────────────
+tipos_venda:
+  venda_direta: [33, 34, 9]
+  leilao: [4, 5, 2, 14, 21]
+
+# ── CDN de Imagens ──────────────────────────────────────────────────────────
+cdn:
+  fotos:
+    base_url: "https://venda-imoveis.caixa.gov.br/fotos"
+    filename_prefix: "F"
+    extension: ".jpg"
+    pattern: "F{propertyDigits}.jpg"
+    sem_protecao: true
+
+  editais:
+    base_url: "https://venda-imoveis.caixa.gov.br/editais"
+    extension: ".PDF"
+    sem_protecao: true
+
+# ── Estratégia de Extração ──────────────────────────────────────────────────
+extracao:
+  primaria:
+    metodo: "Apify API"
+    descricao: "Integração com Apify actors especializados que resolvem Radware + hCaptcha"
+    atores_recomendados:
+      - id: "pizani/caixa-imoveis-leiloes-api"
+        preco: "$10/mês"
+        descricao: "Busca por estado/cidade/modalidade"
+        estrelas: 5.0
+      - id: "leadercorp/caixa-leiloes-scraper"
+        preco: "$5/1000 resultados"
+        descricao: "Mais completo (página de detalhe)"
+      - id: "brasil-scrapers/caixa-leiloes-api"
+        preco: "$25/mês"
+        descricao: "Detalhamento completo com imagens"
+        estrelas: 5.0
+
+  secundaria:
+    metodo: "Playwright + Stealth + Proxies"
+    descricao: "Browser headless com stealth plugin + proxies residenciais + CAPTCHA solver"
+    ferramentas:
+      - "Playwright"
+      - "playwright-stealth"
+      - "residential proxies (BrightData, Oxylabs)"
+      - "CAPTCHA solver (2captcha, CapMonster)"
+
+  complementar:
+    metodo: "CDN direto"
+    descricao: "Imagens e editais públicos — acesso HTTP direto sem proteção"
+    endpoints:
+      - "/fotos/"
+      - "/editais/"
+
+# ── Rate Limiting ──────────────────────────────────────────────────────────
+rate_limiting:
+  delay_entre_requests: 2..5  # segundos (recomendado para evitar detecção)
+  max_imoveis_por_busca: 50
+  safety_cap_paginas: 20
+
+# ── Field Mapping Summary ──────────────────────────────────────────────────
+field_mapping:
+  - campo: "id"
+    origem: "propertyNumber"
+    formato: "caixa_{propertyNumber}"
+
+  - campo: "titulo"
+    origem: "location + type"
+    descricao: "Construído a partir de tipo, bairro, cidade"
+
+  - campo: "endereco"
+    origem: "address | Endereço | Endereco"
+
+  - campo: "bairro"
+    origem: "district | Bairro | bairro"
+
+  - campo: "cidade"
+    origem: "city | Cidade | cidade"
+
+  - campo: "uf"
+    origem: "state | UF | estado"
+
+  - campo: "preco_venda"
+    origem: "minimumSaleValue | Preço | preco"
+    descricao: "Valor mínimo de venda (com desconto aplicado)"
+
+  - campo: "tipo"
+    origem: "propertyType | Tipo | Tipo de imóvel"
+
+  - campo: "area"
+    origem: "privateArea | Área privativa"
+
+  - campo: "quartos"
+    origem: "rooms | Quartos | Dormitórios"
+
+  - campo: "vagas"
+    origem: "garage | Vagas | Garagem"
+
+  - campo: "descricao"
+    origem: "description | Descrição"
+
+  - campo: "fotos"
+    origem: "fotos[] | imagen[] | image"
+    descricao: "URLs de fotos via Azion CDN (acessíveis sem proteção)"
+
+  - campo: "caixa_modalidade"
+    origem: "modality | Modalidade de venda"
+    descricao: "Venda Direta (33,34,9) ou Leilão (4,5,2,14,21)"
+
+  - campo: "caixa_valor_avaliacao"
+    origem: "evaluationValue | Valor de avaliação"
+
+  - campo: "caixa_desconto_percentual"
+    origem: "discount | Desconto"
+
+# ── Modos de Extração Suportados ──────────────────────────────────────────
+modos_extracao:
+  apify_api:
+    descricao: "Recomendado. Integração com Apify actors que resolvem Radware + hCaptcha."
+    requer: "APIFY_TOKEN (variável de ambiente)"
+    comando: "python -m skills.caixa_imoveis.caixa_imoveis_parser parse <arquivo_apify.json>"
+
+  manual:
+    descricao: "Parse de dados já extraídos (JSON de qualquer fonte)"
+    comando: "python -m skills.caixa_imoveis.caixa_imoveis_parser parse input.json --output results.json"
+
+  photo:
+    descricao: "Construir URL de foto a partir do número do imóvel"
+    comando: "python -m skills.caixa_imoveis.caixa_imoveis_parser photo 155550814458-7"

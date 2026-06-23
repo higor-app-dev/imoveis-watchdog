@@ -51,6 +51,10 @@ except ImportError:
             "Copie watchdog_config.py para ~/.hermes/ ou ajuste o PYTHONPATH."
         )
 
+# ── Cache ─────────────────────────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent / "skills"))
+from cache.cache_engine import PaginatedCache, NullCache, create_cache
+
 # ── constantes ────────────────────────────────────────────────────────────────
 
 STATE_SLUGS = {
@@ -139,38 +143,85 @@ def parse_ad(ad: dict) -> dict:
     }
 
 
-def fetch_listings(url: str, scraper: cloudscraper.CloudScraper) -> list[dict]:
-    """Busca anúncios do OLX via cloudscraper e retorna lista padronizada."""
-    ads_raw = []
+def fetch_listings(
+    url: str,
+    scraper: cloudscraper.CloudScraper,
+    *,
+    cache: PaginatedCache | None = None,
+    namespace: str = "",
+) -> list[dict]:
+    """Busca anúncios do OLX via cloudscraper e retorna lista padronizada.
+
+    Quando *cache* e *namespace* são fornecidos, cada página é cacheada
+    individualmente.  Re-executar com o mesmo *namespace* reusa páginas
+    em cache sem emitir requisições HTTP.
+
+    Args:
+        url: URL base de busca (com filtros de cidade/preço).
+        scraper: Instância cloudscraper configurada.
+        cache: Instância PaginatedCache opcional.
+        namespace: Identificador único para agrupar páginas (ex.: cidade+preço).
+
+    Returns:
+        Lista de dicts padronizados.
+    """
+    ads_raw: list[dict] = []
+
     for page in range(1, PAGINATION_LIMIT + 1):
         page_url = url if page == 1 else f"{url}&pageIndex={page}"
-        try:
-            r = scraper.get(page_url, timeout=30)
-            r.raise_for_status()
-        except Exception as exc:
-            print(f"  [AVISO] Erro ao buscar {page_url}: {exc}", file=sys.stderr)
+
+        if cache is not None and namespace:
+            # Cache-aware: delega get/set para o cache engine
+            result = cache.get_or_fetch(
+                namespace,
+                page,
+                lambda p_url=page_url, s=scraper: _fetch_single_page(p_url, s),
+            )
+        else:
+            result = _fetch_single_page(page_url, scraper)
+
+        if result is None:
             break
 
-        match = re.search(
-            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.DOTALL
-        )
-        if not match:
-            print(f"  [AVISO] Sem __NEXT_DATA__ em {page_url}", file=sys.stderr)
-            break
-
-        try:
-            data = json.loads(match.group(1))
-            page_ads = data.get("props", {}).get("pageProps", {}).get("ads", [])
-            # Filtra apenas anúncios reais (ads têm listId; placements não)
-            real_ads = [a for a in page_ads if "listId" in a]
-            ads_raw.extend(real_ads)
-            if len(real_ads) < MAX_RESULTS_PER_FETCH:
-                break  # última página
-        except (json.JSONDecodeError, KeyError) as exc:
-            print(f"  [AVISO] Erro parseando {page_url}: {exc}", file=sys.stderr)
+        ads_raw.extend(result.get("ads", []))
+        if result.get("is_last_page", False):
             break
 
     return [parse_ad(a) for a in ads_raw]
+
+
+def _fetch_single_page(url: str, scraper: cloudscraper.CloudScraper) -> dict | None:
+    """Busca uma página individual do OLX e retorna dict com 'ads' e 'is_last_page'.
+
+    Returns:
+        Dict com ``ads`` (list) e ``is_last_page`` (bool), ou None em caso de erro.
+    """
+    try:
+        r = scraper.get(url, timeout=30)
+        r.raise_for_status()
+    except Exception as exc:
+        print(f"  [AVISO] Erro ao buscar {url}: {exc}", file=sys.stderr)
+        return None
+
+    match = re.search(
+        r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.DOTALL
+    )
+    if not match:
+        print(f"  [AVISO] Sem __NEXT_DATA__ em {url}", file=sys.stderr)
+        return None
+
+    try:
+        data = json.loads(match.group(1))
+        page_ads = data.get("props", {}).get("pageProps", {}).get("ads", [])
+        # Filtra apenas anúncios reais (ads têm listId; placements não)
+        real_ads = [a for a in page_ads if "listId" in a]
+        return {
+            "ads": real_ads,
+            "is_last_page": len(real_ads) < MAX_RESULTS_PER_FETCH,
+        }
+    except (json.JSONDecodeError, KeyError) as exc:
+        print(f"  [AVISO] Erro parseando {url}: {exc}", file=sys.stderr)
+        return None
 
 
 def fingerprint(listings: list[dict]) -> str:
@@ -417,7 +468,13 @@ def run_pipeline(
     scraper = cloudscraper.create_scraper()
     print("  ✓ cloudscraper pronto")
 
-    # 3. Agrupa targets por cidade + faixa de preço (evita duplicatas)
+    # 3. Inicializa cache de paginação
+    cache_config = config.get("cache", {"enabled": True, "dir": "data/cache", "ttl_seconds": 1800})
+    page_cache = create_cache(cache_config)
+    cache_status = "ativo" if isinstance(page_cache, PaginatedCache) else "desativado"
+    print(f"  ✓ Cache de paginação {cache_status}")
+
+    # 4. Agrupa targets por cidade + faixa de preço (evita duplicatas)
     print("\n🔍 Buscando anúncios...")
     city_price_groups: dict[str, dict] = {}
     for t in targets:
@@ -456,7 +513,14 @@ def run_pipeline(
             continue
 
         try:
-            listings = fetch_listings(url, scraper)
+            # Namespace único para cache: cidade + faixa de preço
+            cache_ns = f"{group['city']}|{group['price_label']}" if isinstance(page_cache, PaginatedCache) else ""
+
+            listings = fetch_listings(
+                url, scraper,
+                cache=page_cache,
+                namespace=cache_ns,
+            )
             print(f"    ✓ {len(listings)} anúncios encontrados")
 
             # Filtra por bairro se configurado

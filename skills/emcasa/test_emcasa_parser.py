@@ -621,6 +621,52 @@ class TestFotos(unittest.TestCase):
         for foto in imovel.fotos:
             self.assertTrue(foto.startswith("http"), f"Foto não-http: {foto}")
 
+    def test_fotos_normalizadas_para_large(self):
+        """URLs /detail e /thumbnail devem ser normalizadas para /large."""
+        imovel = from_emcasa_hit(SP_APTO)
+        for foto in imovel.fotos:
+            self.assertFalse(foto.endswith("/detail"),
+                             f"URL não deve terminar em /detail: {foto}")
+            self.assertFalse(foto.endswith("/thumbnail"),
+                             f"URL não deve terminar em /thumbnail: {foto}")
+            self.assertTrue(foto.endswith("/large"),
+                            f"URL deve terminar em /large: {foto}")
+
+    def test_fotos_deduplicacao(self):
+        """URLs duplicadas devem ser removidas."""
+        hit = {
+            "document": {
+                "id": "dedup_test",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/a/b/detail",
+                    "https://cdn.fndn.ai/images/a/b/detail",  # duplicata
+                    "https://cdn.fndn.ai/images/a/c/detail",
+                ],
+            }
+        }
+        imovel = from_emcasa_hit(hit)
+        self.assertEqual(len(imovel.fotos), 2, "Duplicatas devem ser removidas")
+        # Ambas normalizadas para /large
+        self.assertTrue(all(f.endswith("/large") for f in imovel.fotos))
+
+    def test_fotos_primary_image_first(self):
+        """primaryImageUrl deve ser a primeira foto."""
+        hit = {
+            "document": {
+                "id": "primary_test",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/a/second/detail",
+                    "https://cdn.fndn.ai/images/a/third/detail",
+                ],
+                "primaryImageUrl": "https://cdn.fndn.ai/images/a/first/detail",
+            }
+        }
+        imovel = from_emcasa_hit(hit)
+        self.assertEqual(len(imovel.fotos), 3)
+        self.assertIn("first", imovel.fotos[0],
+                      "primaryImageUrl deve ser a primeira foto")
+        self.assertIn("/large", imovel.fotos[0])
+
 
 class TestDataPublicacao(unittest.TestCase):
     """data_publicacao deve ser extraída quando disponível."""

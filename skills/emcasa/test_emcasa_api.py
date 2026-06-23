@@ -159,6 +159,87 @@ class TestParseHit(unittest.TestCase):
         self.assertEqual(parsed["fotos"], [])
         self.assertEqual(parsed["amenities"], [])
 
+    def test_parse_image_urls_normalized_to_large(self):
+        """Verifica que URLs /detail são normalizadas para /large."""
+        hit = {
+            "document": {
+                "id": "img_test_1",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/abc/def/detail",
+                    "https://cdn.fndn.ai/images/abc/ghi/detail",
+                ],
+            }
+        }
+        parsed = parse_hit(hit)
+        fotos = parsed["fotos"]
+        self.assertEqual(len(fotos), 2)
+        for url in fotos:
+            self.assertTrue(url.endswith("/large"),
+                            f"URL deve terminar em /large, mas termina em ...{url[-20:]}")
+        # Verify primaryImageUrl is prioritized when present
+        hit2 = {
+            "document": {
+                "id": "img_test_2",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/abc/second/detail",
+                    "https://cdn.fndn.ai/images/abc/third/detail",
+                ],
+                "primaryImageUrl": "https://cdn.fndn.ai/images/abc/first/detail",
+            }
+        }
+        parsed2 = parse_hit(hit2)
+        fotos2 = parsed2["fotos"]
+        self.assertEqual(len(fotos2), 3)
+        self.assertIn("/large", fotos2[0])
+        self.assertIn("first", fotos2[0], "primaryImageUrl deve ser a primeira foto")
+
+    def test_parse_image_urls_deduplication(self):
+        """Verifica que URLs duplicadas são removidas."""
+        hit = {
+            "document": {
+                "id": "img_dedup",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/abc/same/detail",
+                    "https://cdn.fndn.ai/images/abc/same/detail",  # duplicata
+                    "https://cdn.fndn.ai/images/abc/other/detail",
+                ],
+            }
+        }
+        parsed = parse_hit(hit)
+        self.assertEqual(len(parsed["fotos"]), 2,
+                         "Duplicatas devem ser removidas")
+
+    def test_parse_image_urls_thumbnail_also_large(self):
+        """Verifica que thumbnail também vira /large."""
+        hit = {
+            "document": {
+                "id": "img_thumb",
+                "imageUrls": [
+                    "https://cdn.fndn.ai/images/abc/thumb/thumbnail",
+                ],
+            }
+        }
+        parsed = parse_hit(hit)
+        self.assertEqual(len(parsed["fotos"]), 1)
+        self.assertIn("/large", parsed["fotos"][0])
+
+    def test_parse_image_urls_non_cdn_preserved(self):
+        """Verifica que URLs de outros CDNs não são alteradas."""
+        hit = {
+            "document": {
+                "id": "img_ext",
+                "imageUrls": [
+                    "https://images.example.com/photo.jpg",
+                    "https://cdn.other.com/img/abc",
+                ],
+            }
+        }
+        parsed = parse_hit(hit)
+        fotos = parsed["fotos"]
+        self.assertEqual(len(fotos), 2)
+        self.assertEqual(fotos[0], "https://images.example.com/photo.jpg")
+        self.assertEqual(fotos[1], "https://cdn.other.com/img/abc")
+
     def test_parse_tipo_map(self):
         """Testa mapeamento de todos os tipos."""
         for en, br in TIPO_MAP.items():

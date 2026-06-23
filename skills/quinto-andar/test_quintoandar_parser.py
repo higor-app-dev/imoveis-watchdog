@@ -31,6 +31,8 @@ from quintoandar_parser import (
     _extract_condo_iptu,
     _extract_amenities,
     _extract_photos,
+    _normalize_photo_url,
+    QUINTOANDAR_IMG_BASE,
 )
 
 
@@ -277,20 +279,86 @@ def test_amenities_normalization():
     print(f"[PASS] test_amenities_normalization: {imovel.amenities}")
 
 
-def test_photos_various_formats():
-    """Fotos em diferentes formatos."""
+def test_photos_various_formats() -> None:
+    """Fotos em diferentes formatos são normalizadas para URLs absolutas."""
     listing = {
         **LISTING_FULL,
         "photos": [
-            {"url": "https://img.qa.com.br/a.jpg"},
-            {"src": "https://img.qa.com.br/b.jpg"},
+            {"url": "foto_a.jpg"},           # relativo → absoluto
+            {"src": "foto_b.jpg"},            # src também
+            {"url": "https://cdn.qa.com.br/c.jpg"},  # já absoluto
         ],
-        "mainPhoto": {"url": "https://img.qa.com.br/main.jpg"},
+        "mainPhoto": {"url": "main.jpg"},
     }
     imovel = from_quintoandar_listing(listing)
-    assert len(imovel.fotos) >= 3
-    assert imovel.fotos[0] == "https://img.qa.com.br/main.jpg"
+    assert len(imovel.fotos) >= 4, f"Esperado >=4 fotos, tem {len(imovel.fotos)}"
+    # main no topo
+    assert imovel.fotos[0] == f"{QUINTOANDAR_IMG_BASE}main.jpg"
+    # relativos normalizados
+    assert f"{QUINTOANDAR_IMG_BASE}foto_a.jpg" in imovel.fotos
+    assert f"{QUINTOANDAR_IMG_BASE}foto_b.jpg" in imovel.fotos
+    # absoluto mantido
+    assert "https://cdn.qa.com.br/c.jpg" in imovel.fotos
     print(f"[PASS] test_photos_various_formats: {len(imovel.fotos)} fotos")
+
+
+def test_photo_url_normalization() -> None:
+    """_normalize_photo_url trata todos os formatos de entrada."""
+    cases = [
+        # (entrada, esperado)
+        ("", ""),
+        ("original123.jpg", f"{QUINTOANDAR_IMG_BASE}original123.jpg"),
+        ("/img/med/foto.jpg", "https://www.quintoandar.com.br/img/med/foto.jpg"),
+        ("/custom/path/img.jpg", "https://www.quintoandar.com.br/custom/path/img.jpg"),
+        ("https://cdn.qa.com.br/foto.jpg", "https://cdn.qa.com.br/foto.jpg"),
+        ("http://cdn.qa.com.br/foto.jpg", "http://cdn.qa.com.br/foto.jpg"),
+    ]
+    for entrada, esperado in cases:
+        resultado = _normalize_photo_url(entrada)
+        assert resultado == esperado, f"URL '{entrada}' → '{resultado}', esperado '{esperado}'"
+    print(f"[PASS] test_photo_url_normalization: {len(cases)} casos")
+
+
+def test_photo_deduplication() -> None:
+    """Fotos duplicadas são removidas."""
+    listing = {
+        **LISTING_FULL,
+        "photos": [
+            {"url": "dupe.jpg"},
+            {"url": "dupe.jpg"},           # duplicata exata
+            {"url": "unique.jpg"},
+        ],
+        # mainPhoto com URL que já está em photos → mantida uma vez só
+        "mainPhoto": {"url": "dupe.jpg"},
+    }
+    imovel = from_quintoandar_listing(listing)
+    # unique + dupe (main já era dupe, então não adiciona)
+    assert len(imovel.fotos) == 2, f"Esperado 2 fotos (dedup), tem {len(imovel.fotos)}: {imovel.fotos}"
+    normalized_dupe = f"{QUINTOANDAR_IMG_BASE}dupe.jpg"
+    normalized_unique = f"{QUINTOANDAR_IMG_BASE}unique.jpg"
+    assert normalized_dupe in imovel.fotos
+    assert normalized_unique in imovel.fotos
+    # dupe deve ser a primeira (vem da mainPhoto)
+    assert imovel.fotos[0] == normalized_dupe
+    print(f"[PASS] test_photo_deduplication: {imovel.fotos}")
+
+
+def test_real_quintoandar_photo_format() -> None:
+    """Testa com o formato real de fotos do QuintoAndar (url relativa + subtitle)."""
+    listing = {
+        "id": "999",
+        "salePrice": 500000,
+        "type": "Apartamento",
+        "photos": [
+            {"url": "original999-001.jpg", "subtitle": "Sala"},
+            {"url": "999-002.jpg", "subtitle": "Cozinha"},
+        ],
+    }
+    imovel = from_quintoandar_listing(listing)
+    assert len(imovel.fotos) == 2
+    assert imovel.fotos[0] == f"{QUINTOANDAR_IMG_BASE}original999-001.jpg"
+    assert imovel.fotos[1] == f"{QUINTOANDAR_IMG_BASE}999-002.jpg"
+    print(f"[PASS] test_real_quintoandar_photo_format: {imovel.fotos}")
 
 
 def test_city_slug_uf_extraction():
@@ -324,6 +392,9 @@ if __name__ == "__main__":
         test_empty_condo_iptu,
         test_amenities_normalization,
         test_photos_various_formats,
+        test_photo_url_normalization,
+        test_photo_deduplication,
+        test_real_quintoandar_photo_format,
         test_city_slug_uf_extraction,
     ]
 

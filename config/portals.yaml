@@ -39,6 +39,7 @@ portals:
     functions:
       parse_listing: "from_loft_listing"
       parse_payload: "from_loft_payload"
+      extract_ssr: "extract_ssr"
 
   emcasa:
     name: "emcasa"
@@ -51,7 +52,7 @@ portals:
       parse_listing: "from_emcasa_hit"
       parse_payload: "from_emcasa_api_response"
 
-  # Exemplo de terceiro portal (descomente quando implementar)
+  # Example of third portal (uncomment when implemented)
   # zap:
   #   name: "zap"
   #   display_name: "Zap Imóveis"
@@ -62,3 +63,70 @@ portals:
   #   functions:
   #     parse_listing: "from_zap_listing"
   #     parse_payload: "from_zap_payload"
+
+  lello_imoveis:
+    name: "lelloimoveis"
+    display_name: "Lello Imóveis"
+    parser_module: "skills.lello_imoveis.lello_parser"
+    base_url: "https://www.lelloimoveis.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_lello_listing"
+      parse_payload: "from_lello_payload"
+      build_url: "build_lello_url"
+
+  zuk:
+    name: "zuk"
+    display_name: "Zuk (ex-Zukerman)"
+    parser_module: "skills.zuk.zuk_parser"
+    base_url: "https://www.portalzuk.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_zuk_listing"
+      parse_payload: "from_zuk_payload"
+
+  mega_leiloes:
+    name: "megaleiloes"
+    display_name: "Mega Leilões"
+    parser_module: "skills.mega_leiloes.mega_leiloes_parser"
+    base_url: "https://www.megaleiloes.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_mega_listing"
+      parse_payload: "from_mega_payload"
+
+  sodre_santoro:
+    name: "sodresantoro"
+    display_name: "Sodré Santoro"
+    parser_module: "skills.sodre_santoro.sodre_santoro_parser"
+    base_url: "https://www.sodresantoro.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_sodre_listing"
+      parse_payload: "from_sodre_payload"
+
+  biasi_leiloes:
+    name: "biasileiloes"
+    display_name: "Biasi Leilões"
+    parser_module: "skills.biasi_leiloes.biasi_leiloes_parser"
+    base_url: "https://www.biasileiloes.com.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_biasi_listing"
+      parse_payload: "from_biasi_payload"
+
+  caixa_imoveis:
+    name: "caixaimoveis"
+    display_name: "Imóveis Caixa"
+    parser_module: "skills.caixa_imoveis.caixa_imoveis_parser"
+    base_url: "https://venda-imoveis.caixa.gov.br"
+    enabled: true
+    auth: {}
+    functions:
+      parse_listing: "from_caixa_listing"
+      parse_payload: "from_caixa_payload"

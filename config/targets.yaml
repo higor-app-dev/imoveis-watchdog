@@ -50,6 +50,23 @@ emcasa:
       preco_max: null
       quartos_min: null
 
+lello:
+  compra:
+    - cidade: "são paulo"
+      uf: "SP"
+      bairros: []  # vazio = todos os bairros cobertos pelo Lello
+      tipos: ["apartamento", "casa", "cobertura", "duplex", "kitnet", "loft", "studio", "flat", "terreno", "sobrado", "conjugado", "sala_comercial", "comercial", "predio"]
+      preco_max: null
+      quartos_min: null
+
+  aluguel:
+    - cidade: "são paulo"
+      uf: "SP"
+      bairros: []  # vazio = todos
+      tipos: ["apartamento", "casa", "cobertura", "duplex", "kitnet", "loft", "studio", "flat"]
+      preco_max: null
+      quartos_min: null
+
 # Config geral
 geral:
   intervalo_horas: 6  # a cada 6 horas

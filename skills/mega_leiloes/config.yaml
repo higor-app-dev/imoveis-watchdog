@@ -1,0 +1,118 @@
+# Mega Leilões — Configuração de Extração
+# https://www.megaleiloes.com.br
+
+# Algolia — API pública (search-only key)
+algolia:
+  app_id: "1A8O5M7X6Q"
+  api_key: "055311365c6f5cdd0d1bff3e0acba7ae"
+  index: "Items"
+  endpoint: "https://1A8O5M7X6Q.algolia.net/1/indexes/Items/query"
+  hits_per_page: 1000
+  max_pages: 130  # Safety cap (~122K records)
+
+# URL Base
+base_url: "https://www.megaleiloes.com.br"
+
+# CDN de imagens
+cdn:
+  base: "https://cdn1.megaleiloes.com.br/batches"
+  sizes:
+    thumbnail: "320x240"   # Algolia image_path (1 img, thumbnail)
+    medium: "670x380"      # SSR detail page carousel (OwlCarousel)
+    full: "1024x768"       # SSR detail page lightbox (MagnificPopup)
+  note: "Algolia API retorna 1 imagem via image_path. Página SSR (detail) pode ter múltiplas imagens (2-5+), todas no mesmo CDN. image_path do Algolia NÃO corresponde necessariamente à primeira imagem da galeria SSR — é um hash md5 arbitrário."
+
+# Headers HTTP (Algolia + Navegador)
+headers:
+  default:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    Accept: "application/json"
+    Accept-Language: "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+    Content-Type: "application/json"
+
+# Rotas
+routes:
+  listing: "/imoveis"  # SSR listing page (Cloudflare-protected)
+  detail: "/imovel/{uf}/{cidade}/{slug}"  # SSR detail page
+  algolia: "POST /1/indexes/Items/query"  # Algolia search (primary)
+
+# Paginação (client-side — Algolia retorna todos os hits por página)
+pagination:
+  mode: "algolia_cursor"  # Paginação via page parameter no Algolia
+  items_per_page: 1000
+  max_pages: 130
+
+# Campos extraídos por fonte
+fields:
+  algolia_api:
+    # Core listing fields (do hit Algolia)
+    - objectID              # ID único no Algolia
+    - headline              # Título principal
+    - batch_id              # ID do lote (CDN key)
+    - batch                 # Número do lote
+    - batch_status          # 0=upcoming, 1=open, 3=suspended
+    - auction               # Nome do leilão
+    - auction_id            # ID do leilão
+    - auction_headline      # Título do leilão
+    - category              # Categoria (ex: "Imóveis")
+    - subcategory           # Subcategoria (ex: "Apartamentos")
+    - address               # Endereço completo
+    - sublocality           # Bairro
+    - city                  # Cidade
+    - state                 # UF
+    - first_instance_value   # Valor 1ª praça (string BR)
+    - second_instance_value  # Valor 2ª praça (string BR)
+    - third_instance_value   # Valor 3ª praça (string BR)
+    - currency              # Moeda (R$ / US$)
+    - first_instance_date_start   # Início 1ª praça (Unix ts)
+    - first_instance_date_end     # Fim 1ª praça (Unix ts)
+    - second_instance_date_end    # Fim 2ª praça (Unix ts)
+    - type                  # Judicial / Extrajudicial
+    - process_number        # Número do processo
+    - forum                 # Foro / Vara
+    - author                # Autor (exequente)
+    - respondent            # Réu (executado)
+    - constituent           # Comitente (banco / vendedor)
+    - image_path            # URL thumbnail (320×240)
+    - url                   # URL relativa do detalhe
+    - rating                # Nota (0-5)
+
+  ssr_detail:
+    # Campos disponíveis apenas na página de detalhe (enriquecimento)
+    - incremento            # Incremento mínimo entre lances (R$)
+    - comissao_leiloeiro    # Comissão do leiloeiro (% ou R$)
+    - leiloeiro             # Nome do leiloeiro
+    - edital_url            # URL do edital PDF
+    - matricula_url         # URL da matrícula PDF
+    - visitas               # Número de visitas ao anúncio
+    - habilitados           # Participantes habilitados
+    - qtd_lances            # Lances registrados
+    - desconto_pct          # % desconto na 2ª praça
+    - area                  # Área do imóvel (m²)
+    - quartos               # Número de quartos
+    - banheiros             # Número de banheiros
+    - vagas                 # Vagas de garagem
+
+# Mapeamento batch_status → label
+batch_status_labels:
+  0: "upcoming"      # Em breve (ainda não aberto)
+  1: "open"          # Aberto para lances
+  3: "suspended"     # Suspenso
+
+# Filtros client-side (Algolia não tem facetFilters configurados)
+filtros:
+  client_side: true  # Filtragem categoria + status feita em Python
+  categorias_interesse: ["Imóveis"]
+  status_ativos: [0, 1]  # upcoming + open
+
+# Estratégia
+estrategia: "algolia_api"  # Primária: API Algolia pública. SSR para enriquecimento.
+cloudflare: false          # Algolia API não tem Cloudflare
+
+# Timeout
+timeout_seconds: 30
+
+# Cache
+cache:
+  enabled: true
+  ttl_seconds: 600  # 10 min

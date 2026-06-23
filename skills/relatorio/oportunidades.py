@@ -204,6 +204,7 @@ class RelatorioOportunidades:
                 "loft": "Loft",
                 "emcasa": "EmCasa",
                 "zap": "Zap Imóveis",
+                "lello": "Lello Imóveis",
             }.get(fonte, fonte.capitalize())
 
             linhas.append(f"  {nome_exibicao} ({fonte})")
@@ -330,6 +331,7 @@ class RelatorioOportunidades:
                 "loft": "Loft",
                 "emcasa": "EmCasa",
                 "zap": "Zap Imóveis",
+                "lello": "Lello Imóveis",
             }.get(fonte, fonte.capitalize())
             por_fonte[fonte] = {
                 "nome_exibicao": nome_exibicao,
