@@ -322,6 +322,7 @@ class TestAmenitiesMapping:
 
     def test_amenities_campo_existe_no_schema_imovel(self):
         """O campo amenities no Lello mapper deve ser compatível com Imovel.from_dict."""
+        sys.path.insert(0, str(Path.home() / ".hermes"))
         from imovel_schema import Imovel
         result = from_lello_listing(SAMPLE_WITH_COMPLEMENTOS, negociacao="venda")
         assert result is not None
