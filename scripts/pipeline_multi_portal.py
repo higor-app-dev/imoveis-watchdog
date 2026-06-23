@@ -227,11 +227,33 @@ def run_pipeline(
             json.dumps(raw_data, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
-        print(f"  📄 Listings brutos: {extract_path}")
+        print(f'  📄 Listings brutos: {extract_path}')
+
+    # ── 5b. Verificação de mudanças nos portais ────────────────────────
+    if not dry_run:
+        print('\n🔍 Verificando mudanças nos portais...')
+        try:
+            from scripts.change_detector import check_portal_changes
+
+            change_result = check_portal_changes()
+            if change_result.get('changed'):
+                print(f'  ⚠️  {change_result["summary"]}')
+                if not no_notify:
+                    msg = (
+                        '*🚨 Alerta de Mudança nos Portais*\n\n'
+                        f'{change_result["summary"]}'
+                    )
+                    enviar_telegram(msg, dry_run=dry_run)
+            else:
+                print(f'  ✅ {change_result["summary"]}')
+        except ImportError:
+            print('  ℹ️  change_detector não disponível, ignorando')
+        except Exception as exc:
+            print(f'  ⚠️  Erro no change_detector: {exc}')
 
     # ── Fim ─────────────────────────────────────────────────────────────
-    print(f"\n{'=' * 60}")
-    print(f"Pipeline concluída: {datetime.now(timezone.utc).isoformat()}")
+    print(f"{'=' * 60}")
+    print(f'Pipeline concluída: {datetime.now(timezone.utc).isoformat()}')
     print(f"{'=' * 60}")
 
     return 0
