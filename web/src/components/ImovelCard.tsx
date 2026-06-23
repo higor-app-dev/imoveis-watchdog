@@ -103,6 +103,18 @@ export function ImovelCard({ imovel }: { imovel: ImovelData }) {
             {imovel.fonte}
           </Badge>
         </div>
+        {imovel.url && (
+          <a
+            href={imovel.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-2 right-2 flex items-center justify-center size-8 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors backdrop-blur-sm"
+            title="Ver anúncio original"
+          >
+            <ExternalLink className="size-4" />
+          </a>
+        )}
       </div>
 
       {/* Content */}

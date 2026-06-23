@@ -113,6 +113,35 @@ def _as_list(val: Any) -> list:
 
 FONTE = "emcasa"
 
+# Mapa cidade → UF para crawl data que não tem state/location_state
+CIDADE_UF: dict[str, str] = {
+    "atibaia": "SP",
+    "barueri": "SP",
+    "campinas": "SP",
+    "cotia": "SP",
+    "diadema": "SP",
+    "guarujá": "SP",
+    "guarulhos": "SP",
+    "holambra": "SP",
+    "jundiai": "SP",
+    "jundiaí": "SP",
+    "mauá": "SP",
+    "niterói": "RJ",
+    "osasco": "SP",
+    "piracicaba": "SP",
+    "rio de janeiro": "RJ",
+    "santa branca": "SP",
+    "santana de parnaíba": "SP",
+    "santo andré": "SP",
+    "suzano": "SP",
+    "são bernardo do campo": "SP",
+    "são caetano do sul": "SP",
+    "são josé dos campos": "SP",
+    "são paulo": "SP",
+    "taboão da serra": "SP",
+    "várzea paulista": "SP",
+}
+
 TIPO_MAP = {
     "apartment": "apartamento",
     "house": "casa",
@@ -241,6 +270,9 @@ def from_emcasa_hit(
         or d.get("location_state")
         or ""
     )
+    if not uf_raw:
+        # Fallback: derivar UF do nome da cidade
+        uf_raw = CIDADE_UF.get(cidade.strip().lower(), "")
     uf = uf_raw.upper()[:2] if uf_raw else ""
 
     # ─ Características ────────────────────────────────────────────────────
