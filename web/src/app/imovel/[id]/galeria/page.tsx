@@ -66,7 +66,7 @@ export default function GaleriaPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Link
@@ -87,28 +87,28 @@ export default function GaleriaPage() {
           </div>
         </div>
 
-        {/* Image Grid */}
+        {/* Image Grid — Pinterest masonry */}
         {images.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] p-16 text-center">
             <ImageIcon className="size-16 mx-auto mb-3 opacity-30 text-[var(--muted-foreground)]" />
             <p className="text-sm text-[var(--muted-foreground)]">Nenhuma foto disponível</p>
           </div>
         ) : (
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-3">
             {images.map((url, i) => (
               <button
                 key={i}
                 onClick={() => setLightbox(i)}
-                className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                className="group relative w-full break-inside-avoid mb-3 rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               >
                 <img
                   src={url}
                   alt={`${title} - foto ${i + 1}`}
-                  className="size-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-auto block group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+                <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   {i + 1}/{images.length}
                 </div>
               </button>
