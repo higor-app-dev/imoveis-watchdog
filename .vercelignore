@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+__pycache__
+*.pyc
+data
+config
+scripts
+skills
+tests
+scrapers
+web/node_modules
+web/.next

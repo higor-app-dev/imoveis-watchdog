@@ -45,6 +45,8 @@ export interface Imovel {
 }
 
 export interface ImovelFilters {
+  id?: string;
+  busca_id?: number;
   bairro?: string;
   tipo?: string;
   modalidade?: string;
@@ -217,6 +219,10 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
   if (filters.cidade) {
     conditions.push("cidade LIKE ?");
     args.push(`%${filters.cidade}%`);
+  }
+  if (filters.id) {
+    conditions.push("id = ?");
+    args.push(filters.id);
   }
   if (filters.fonte) {
     conditions.push("fonte = ?");

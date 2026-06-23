@@ -5,16 +5,11 @@ import Link from "next/link";
 import {
   Home,
   Search,
-  MapPin,
-  DollarSign,
-  Ruler,
-  Car,
-  Bed,
-  Bath,
   Clock,
   ArrowRight,
-  ExternalLink,
 } from "lucide-react";
+import { ImovelCard, formatPrice } from "@/components/ImovelCard";
+import type { ImovelData } from "@/components/ImovelCard";
 
 // --- Types ---
 interface Busca {
@@ -33,30 +28,7 @@ interface Busca {
   resultado_count: number;
 }
 
-interface Imovel {
-  id: string;
-  titulo: string;
-  fonte: string;
-  url: string;
-  bairro: string;
-  cidade: string;
-  modalidade: string;
-  preco_venda: number | null;
-  preco_aluguel: number | null;
-  area_m2: number | null;
-  quartos: number | null;
-  banheiros: number | null;
-  vagas: number | null;
-  foto_url: string | null;
-  data_primeira_vista: string | null;
-}
-
 // --- Helpers ---
-function formatPrice(value: number | null): string {
-  if (value === null || value === 0) return "";
-  return `R$ ${value.toLocaleString("pt-BR")}`;
-}
-
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -97,114 +69,6 @@ function buscaDesc(b: Busca): string {
   return parts.join(" · ");
 }
 
-function imovelTitle(i: Imovel): string {
-  const parts: string[] = [];
-  if (i.titulo) return i.titulo;
-  if (i.bairro) parts.push(i.bairro);
-  if (i.cidade) parts.push(i.cidade);
-  return parts.join(" - ") || "Imóvel";
-}
-
-// --- Components ---
-function PriceTag({ imovel }: { imovel: Imovel }) {
-  if (imovel.preco_venda) {
-    return (
-      <span className="inline-flex items-center gap-1 text-lg font-bold text-blue-600 dark:text-blue-400">
-        {formatPrice(imovel.preco_venda)}
-      </span>
-    );
-  }
-  if (imovel.preco_aluguel) {
-    return (
-      <span className="inline-flex items-center gap-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
-        {formatPrice(imovel.preco_aluguel)}/mês
-      </span>
-    );
-  }
-  return null;
-}
-
-function Badge({ children, color }: { children: React.ReactNode; color: string }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {children}
-    </span>
-  );
-}
-
-function ModalidadeBadge({ m }: { m: string }) {
-  if (m === "compra" || m === "venda")
-    return <Badge color="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">Compra</Badge>;
-  if (m === "aluguel")
-    return <Badge color="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Aluguel</Badge>;
-  if (m === "leilao")
-    return <Badge color="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Leilão</Badge>;
-  return <Badge color="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">{m}</Badge>;
-}
-
-// --- Cards ---
-function ImovelCard({ imovel }: { imovel: Imovel }) {
-  const title = imovelTitle(imovel);
-  return (
-    <div className="group rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition-all hover:shadow-md hover:-translate-y-0.5">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex flex-wrap gap-1">
-          <ModalidadeBadge m={imovel.modalidade} />
-          <Badge color="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
-            {imovel.fonte}
-          </Badge>
-        </div>
-        <a
-          href={imovel.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <ExternalLink className="size-4" />
-        </a>
-      </div>
-
-      <h3 className="font-medium text-sm leading-snug mb-2 line-clamp-2">{title}</h3>
-
-      {imovel.bairro && (
-        <p className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] mb-2">
-          <MapPin className="size-3 shrink-0" />
-          {imovel.bairro}{imovel.cidade ? `, ${imovel.cidade}` : ""}
-        </p>
-      )}
-
-      <PriceTag imovel={imovel} />
-
-      <div className="flex flex-wrap gap-3 mt-2 text-xs text-[var(--muted-foreground)]">
-        {imovel.area_m2 && (
-          <span className="flex items-center gap-1">
-            <Ruler className="size-3" />
-            {imovel.area_m2}m²
-          </span>
-        )}
-        {imovel.quartos && (
-          <span className="flex items-center gap-1">
-            <Bed className="size-3" />
-            {imovel.quartos}
-          </span>
-        )}
-        {imovel.banheiros && (
-          <span className="flex items-center gap-1">
-            <Bath className="size-3" />
-            {imovel.banheiros}
-          </span>
-        )}
-        {imovel.vagas && (
-          <span className="flex items-center gap-1">
-            <Car className="size-3" />
-            {imovel.vagas}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function BuscaCard({ busca }: { busca: Busca }) {
   const desc = buscaDesc(busca);
   return (
@@ -236,7 +100,7 @@ function BuscaCard({ busca }: { busca: Busca }) {
 // --- Main Page ---
 export default function HomePage() {
   const [buscas, setBuscas] = useState<Busca[]>([]);
-  const [recentes, setRecentes] = useState<Imovel[]>([]);
+  const [recentes, setRecentes] = useState<ImovelData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
