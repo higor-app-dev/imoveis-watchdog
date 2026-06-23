@@ -509,6 +509,58 @@ def _parse_money_br(raw: Any) -> float | None:
         return None
 
 
+
+def _extract_cidade_uf_from_titulo(titulo: str) -> tuple[str, str]:
+    """Extract cidade and UF from a Biasi title string.
+
+    Biasi titles follow the pattern ``... - Cidade/UF`` or ``... em Cidade/UF``.
+    This function handles both cases by first trying to split on `` - `` and
+    falling back to matching the last preposition before ``/UF``.
+
+    Args:
+        titulo: Raw title from the listing (e.g. ``"Casa no Centro - Cachoeira Do Sul/RS"``).
+
+    Returns:
+        Tuple of (cidade, uf). Both are empty strings if extraction fails.
+    """
+    if not titulo:
+        return "", ""
+
+    m = re.search(r"/([A-Z]{2})\s*$", titulo)
+    if not m:
+        return "", ""
+
+    uf = m.group(1)
+    before_uf = titulo[: m.start()].strip()
+
+    # Strategy 1: split on ' - ' (dash-space, most common)
+    parts = before_uf.split(" - ")
+    if len(parts) > 1:
+        cidade = parts[-1].strip()
+        cidade = re.sub(
+            r"^(?:em |de |no |na |do |da |dos |das )",
+            "",
+            cidade,
+            flags=re.IGNORECASE,
+        ).strip()
+        if cidade and len(cidade) > 2:
+            return cidade, uf
+
+    # Strategy 2: match the LAST preposition before /UF (titles without dash)
+    m2 = re.search(
+        r".*\b(?:em |de |no |na |do |da |dos |das )\s*"
+        r"([A-Za-z\xc0-\xff][A-Za-z\xc0-\xff ]*?)\s*$",
+        before_uf,
+    )
+    if m2:
+        cidade = m2.group(1).strip()
+        if cidade and len(cidade) > 2:
+            return cidade, uf
+
+    # Fallback: return the full string before /UF
+    return before_uf, uf
+
+
 def _parse_date_br(date_str: str | None) -> str | None:
     """Parse a Brazilian date/time string to ISO 8601.
 
@@ -699,11 +751,23 @@ def from_biasi_listing(raw: dict) -> dict | Any | None:
     cidade = mapped.get("cidade", "")
     if not cidade:
         cidade = raw.get("cidade") or raw.get("city") or raw.get("cidade_imovel") or ""
+    if not cidade:
+        # Fallback: extract from title (Biasi titles end with "Cidade/UF")
+        titulo = mapped.get("titulo", "")
+        cidade, uf_from_tit = _extract_cidade_uf_from_titulo(titulo)
+        if cidade:
+            mapped["uf"] = uf_from_tit
     mapped["cidade"] = str(cidade) if cidade else ""
 
     uf = mapped.get("uf", "")
     if not uf:
         uf = raw.get("uf") or raw.get("state") or raw.get("estado") or ""
+    if not uf:
+        # Fallback: extract from title
+        titulo = mapped.get("titulo", "")
+        _, uf_from_tit = _extract_cidade_uf_from_titulo(titulo)
+        if uf_from_tit:
+            uf = uf_from_tit
     mapped["uf"] = str(uf).upper() if uf else ""
 
     # ── Auction-specific fields ───────────────────────────────────────────
