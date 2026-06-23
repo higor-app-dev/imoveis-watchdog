@@ -20,10 +20,10 @@ import {
   Hash,
   Globe,
   ImageIcon,
-  ChevronLeft,
-  ChevronRight,
   Grid3X3,
 } from "lucide-react";
+import AwesomeSlider from "@rcaferati/react-awesome-slider";
+import "@rcaferati/react-awesome-slider/styles.css";
 import { formatPrice, formatDate } from "@/components/ImovelCard";
 import { useImovel } from "@/hooks/useImovel";
 
@@ -49,38 +49,7 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 function ImageSlider({ images, title }: { images: string[]; title: string }) {
   const [current, setCurrent] = useState(0);
-  const [touchX, setTouchX] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [offsetX, setOffsetX] = useState(0);
   const total = images.length;
-
-  const prev = () => setCurrent((c) => (c - 1 + total) % total);
-  const next = () => setCurrent((c) => (c + 1) % total);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchX(e.touches[0].clientX);
-    setDragging(true);
-    setOffsetX(0);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!dragging || touchX === null) return;
-    const dx = e.touches[0].clientX - touchX;
-    setOffsetX(dx);
-  };
-
-  const handleTouchEnd = () => {
-    if (!dragging || touchX === null) return;
-    const THRESHOLD = 60;
-    if (offsetX < -THRESHOLD) {
-      next();
-    } else if (offsetX > THRESHOLD) {
-      prev();
-    }
-    setTouchX(null);
-    setDragging(false);
-    setOffsetX(0);
-  };
 
   if (total === 0) {
     return (
@@ -91,67 +60,34 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
     );
   }
 
-  return (
-    <div
-      className="relative aspect-[16/10] bg-[var(--muted)] overflow-hidden group select-none"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      <div
-        className="size-full transition-transform duration-150"
-        style={
-          dragging && touchX !== null
-            ? { transform: `translateX(${offsetX}px)`, transition: "none" }
-            : { transform: "translateX(0)", transition: "transform 0.3s ease-out" }
-        }
-      >
-        <img
-          src={images[current]}
-          alt={`${title} - foto ${current + 1}`}
-          className="size-full object-cover"
-        />
-      </div>
+  const media = images.map((url) => ({ source: url }));
 
-      <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm pointer-events-none">
+  return (
+    <div className="relative aspect-[16/10] overflow-hidden group bg-[var(--muted)]">
+      <AwesomeSlider
+        media={media}
+        buttons={true}
+        bullets={true}
+        infinite={true}
+        mobileTouch={true}
+        organicArrows={true}
+        onTransitionEnd={(info: any) => setCurrent(info?.currentIndex ?? 0)}
+        className="size-full"
+        style={
+          {
+            height: "100%",
+            width: "100%",
+            "--organic-arrow-color": "rgba(255,255,255,0.9)",
+            "--organic-arrow-thickness": "4px",
+            "--control-bullet-color": "rgba(255,255,255,0.35)",
+            "--control-bullet-active-color": "rgba(255,255,255,0.9)",
+            "--content-background-color": "#10131a",
+          } as React.CSSProperties
+        }
+      />
+      <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm pointer-events-none z-10">
         {current + 1} / {total}
       </div>
-
-      {total > 1 && (
-        <>
-          <button
-            onClick={prev}
-            className="absolute left-2 top-1/2 -translate-y-1/2 size-9 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all backdrop-blur-sm"
-            aria-label="Foto anterior"
-          >
-            <ChevronLeft className="size-5" />
-          </button>
-          <button
-            onClick={next}
-            className="absolute right-2 top-1/2 -translate-y-1/2 size-9 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all backdrop-blur-sm"
-            aria-label="Próxima foto"
-          >
-            <ChevronRight className="size-5" />
-          </button>
-        </>
-      )}
-
-      {total > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {images.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrent(i)}
-              className={`size-2 rounded-full transition-all ${
-                i === current
-                  ? "bg-white scale-110"
-                  : "bg-white/40 hover:bg-white/60"
-              }`}
-              aria-label={`Foto ${i + 1}`}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
