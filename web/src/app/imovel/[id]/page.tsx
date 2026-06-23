@@ -49,10 +49,38 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 function ImageSlider({ images, title }: { images: string[]; title: string }) {
   const [current, setCurrent] = useState(0);
+  const [touchX, setTouchX] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [offsetX, setOffsetX] = useState(0);
   const total = images.length;
 
   const prev = () => setCurrent((c) => (c - 1 + total) % total);
   const next = () => setCurrent((c) => (c + 1) % total);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchX(e.touches[0].clientX);
+    setDragging(true);
+    setOffsetX(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!dragging || touchX === null) return;
+    const dx = e.touches[0].clientX - touchX;
+    setOffsetX(dx);
+  };
+
+  const handleTouchEnd = () => {
+    if (!dragging || touchX === null) return;
+    const THRESHOLD = 60;
+    if (offsetX < -THRESHOLD) {
+      next();
+    } else if (offsetX > THRESHOLD) {
+      prev();
+    }
+    setTouchX(null);
+    setDragging(false);
+    setOffsetX(0);
+  };
 
   if (total === 0) {
     return (
@@ -64,16 +92,30 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
   }
 
   return (
-    <div className="relative aspect-[16/10] bg-[var(--muted)] overflow-hidden group">
-      {/* Current image */}
-      <img
-        src={images[current]}
-        alt={`${title} - foto ${current + 1}`}
-        className="size-full object-cover transition-opacity duration-300"
-      />
+    <div
+      className="relative aspect-[16/10] bg-[var(--muted)] overflow-hidden group select-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Image wrapper with swipe animation */}
+      <div
+        className="size-full transition-transform duration-150"
+        style={
+          dragging && touchX !== null
+            ? { transform: `translateX(${offsetX}px)`, transition: "none" }
+            : { transform: "translateX(0)", transition: "transform 0.3s ease-out" }
+        }
+      >
+        <img
+          src={images[current]}
+          alt={`${title} - foto ${current + 1}`}
+          className="size-full object-cover"
+        />
+      </div>
 
       {/* Counter badge */}
-      <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm">
+      <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm pointer-events-none">
         {current + 1} / {total}
       </div>
 
