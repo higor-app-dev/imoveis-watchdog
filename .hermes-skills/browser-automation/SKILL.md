@@ -115,17 +115,99 @@ OLX, QuintoAndar and similar SPAs load listings via JavaScript — the initial H
 - `networkidle` times out on SPAs — use `domcontentloaded` + `await page.wait_for_timeout(3000)` instead
 - When Playwright can't extract listings (0 matches in DOM), screenshot the page to verify
 
+### 7. Cascading Dropdown Selection (State → City Pattern)
+
+Multi-step forms where a state dropdown triggers AJAX to populate a city dropdown (same `<select>` element, replaced via JS) require special handling.
+
+**Don't use `page.select_option()` — it races with the AJAX replacement.** The select element is found, but by the time Playwright tries to select, the JS has already replaced the element or its options.
+
+**Fix: Use `page.evaluate()` to set the value and dispatch the change event:**
+
+```python
+page.evaluate('''() => {
+    const sel = document.querySelector("select[name='location']");
+    if (!sel) return false;
+    sel.value = "4807";
+    sel.dispatchEvent(new Event('change', {bubbles: true}));
+    return true;
+}''')
+page.wait_for_timeout(2000)
+
+page.evaluate('''() => {
+    const sel = document.querySelector("select[name='location']");
+    if (!sel) return false;
+    sel.value = "5374";
+    sel.dispatchEvent(new Event('change', {bubbles: true}));
+    return true;
+}''')
+page.wait_for_timeout(1500)
+```
+
+Wait 1.5-2s between state and city for AJAX. `{bubbles: true}` is critical — some listeners check for trusted events.
+
+### 8. Skip Multi-Step Form Wizards via Direct URL
+
+Classifieds sites often have multi-step wizards (Step 1: category → Step 2: details). The Step 2 URL often encodes the category ID.
+
+**Go directly to Step 2 instead of navigating through Step 1 UI:**
+
+```python
+page.goto(f'{BASE}/post/add/category/{cat_id}/', wait_until='domcontentloaded')
+page.wait_for_timeout(3000)
+```
+
+To discover the direct URL: complete Step 1 once manually, note the resulting URL, test it directly.
+
+### 9. Content Variation to Bypass Duplicate Detection
+
+Many sites check for duplicate content via content similarity (not exact title match).
+
+**Strategy: Pre-generate a diverse text pool (50+ entries):**
+- Titles and descriptions as separate JSON files
+- Random selection + numeric suffix per submission
+- Each description should have different sentence structure (<60% word overlap)
+- Contact info goes in description body; form email field can differ
+
+**Dup detection signal:** `item_dupe/` in response URL, or "muito semelhante ao" error.
+
+### 10. Background Execution with Progress Reporting
+
+Long-running automation (25+ form submissions):
+
+- Start via `terminal(background=True, notify_on_complete=True)`
+- `print()` each step with `✅`/`❌` indicators
+- Write a JSON report at the end with timestamp, total/success counts, and {city, category, url} array
+- Also write a plain-text version
+- On completion notification, read and deliver the report
+- Verify published ads by searching the contact info on the target site
+
+### EmCasa (emcasa.com) — Algolia InstantSearch
+
+EmCasa usa **Algolia InstantSearch** para busca. Browser tool acessa direto (sem Cloudflare). Dados embedados em `window[Symbol.for("InstantSearchInitialResults")]` — JSON completo com hits, facets e stats.
+
+URL: `/imoveis/sp/sao-paulo` (SP), `/imoveis/rj/rio-de-janeiro` (RJ).
+
+Dados: price, previousPrice, priceChangePercent (redução!), bedrooms, bathrooms, parkingSpaces, suites, property_area_total, property_type, neighborhood, city, street, condoFee, propertyTax, propertyFeatures, buildingAmenities, imageUrls (cdn.fndn.ai), description. Total: ~12.800 hits SP, 12/página.
+
+### Lello Imóveis (lelloimoveis.com.br) — Next.js Pages Router
+
+Imobiliária tradicional SP. Browser tool acessa direto (sem Cloudflare). Next.js Pages Router, React Query, styled-components v6, Radix UI. SSR via getStaticProps.
+
+URLs: `/venda/residencial/apartamento-tipos/<pagina>-pagina/` (venda), `/aluguel/residencial/apartamento-tipos/<pagina>-pagina/` (aluguel), `/venda/residencial/apartamento-tipos/<bairro>-sao_paulo-regioes/<pagina>-pagina/` (bairro). API: `apidev3.lelloimoveis.com.br`.
+
 ### Portal-Specific Notes for Brazilian Real Estate
 
 | Portal | Access Method | Notes |
 |--------|--------------|-------|
-| **Loft** | Browser tool ✅ | Works directly, no Cloudflare |
+| **Loft** | ❌ CloudFront | **Atualização jun/2026:** Loft agora serve via CloudFront e bloqueia Browserbase (403). curl com User-Agent de browser ainda retorna 200 para o shell HTML, mas os listings são carregados via JS client-side (Next.js Pages Router + MUI). Para extração, tentar: Local Playwright (stealth) → curl + parse de dados embedados → Google search `site:loft.com.br`. URL patterns: `/venda/apartamentos/sp/sao-paulo`, `/venda/apartamentos/sp/sao-paulo/com-1-quarto`, `?bairros=bela-vista_sao-paulo_sp~...&vagas=1`. |
 | **Viva Real** | web_extract ✅ | Works for general page data; filtered URLs return 404 |
-| **QuintoAndar** | Browser tool ✅ | City + type URLs work directly. Next.js data route returns structured JSON (`/_next/data/<buildId>/...json`). SPA ignores bairro/price URL params — use browser interaction for those filters. ~14 listings per SSR page. See `references/portal-fallback-chain.md` for full API/structure. |
+| **QuintoAndar** | Browser tool ✅ | City + type URLs work directly. Next.js data route returns structured JSON (`/_next/data/<buildId>/...json`). API: `apigw.prod.quintoandar.com.br/house-listing-search/`. Each listing returns: id, salePrice, rentPrice, area, bedrooms, bathrooms, parkingSpots, type, address, neighbourhood, condoIptu, photos, amenities. SPA ignores bairro/price URL params — use browser interaction for those filters. ~14 listings per SSR page. See `references/quinto-andar-extraction.md` for full API structure and extraction strategy. |
 | **OLX** | Local Playwright (partial) | SPA — needs UI navigation, listings not in initial DOM |
 | **ZAP Imóveis** | ❌ Cloudflare | Blocks both Browserbase and local Playwright |
 | **SP Imóvel** | ❌ 403 | Blocks all access |
-| **Mercado Livre** | ❌ Error | Returns Hubo un error page |
+| **Mercado Livre Imóveis** | ❌ Error | Returns Hubo un error page |
+| **EmCasa** (emcasa.com) | Browser tool ✅ | Algolia InstantSearch. Dados embedados em `window[Symbol.for("InstantSearchInitialResults")]`. Sem Cloudflare. Inclui previousPrice e priceChangePercent. |
+| **Lello Imóveis** (lelloimoveis.com.br) | Browser tool ✅ | Next.js Pages Router, React Query. Sem Cloudflare. SSR via getStaticProps. URL: `/venda/residencial/apartamento-tipos/<pagina>-pagina/`. |
 
 ## Absorbed: Playwright Deep Patterns
 
@@ -248,4 +330,8 @@ asyncio.run(main())
 - `references/test-video-concat.md` — Concatenating Playwright test result videos with ffmpeg
 - `references/playwright-ava-efape.md` — AVA-EFAPE patterns from playwright-automation skill
 - `references/ava-efape-moodle-iv.md` — AVA-EFAPE Moodle Interactive Video specifics
+- `references/quinto-andar-extraction.md` — QuintoAndar extraction: Next.js data route, house schema, API endpoints, URL patterns, filter options, browser interaction strategy
+- `references/emcasa-extraction.md` — EmCasa extraction: Algolia InstantSearch SSR data, house schema, facets, stats, pagination
+- `references/lello-extraction.md` — Lello Imóveis extraction: Next.js Pages Router, SSR, URL patterns, DOM data structure, pagination
+- `references/html-parsing-bs4.md` — BeautifulSoup HTML parsing: `get_text()` nested-child trap, Brazilian price parsing, card extraction patterns, inline JSON merging, API duplicate detection
 - `templates/playwright-automation-scaffold.py` — Reusable Python scaffolding for Playwright automation scripts

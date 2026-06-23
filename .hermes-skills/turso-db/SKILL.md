@@ -35,6 +35,8 @@ Before writing any Turso code, you MUST know these constraints:
 - **Encryption requires `--experimental-encryption` flag** — not enabled by default
 - **MVCC is experimental and not production ready** — `PRAGMA journal_mode = experimental_mvcc`
 - **Vector distance: lower = closer** — ORDER BY distance ASC for nearest neighbors
+- **No `NULLS LAST` / `NULLS FIRST`** — SQLite/Turso does not support `NULLS LAST` in ORDER BY. Use `ORDER BY col IS NULL, col` for ascending-with-NULLs-last, or omit NULLS clauses entirely (SQLite's default ordering places NULLs before non-NULL on ascending, after on descending)
+- **`@tursodatabase/serverless` SDK can fail on Vercel** — `HTTP error! status: 400` for valid connections. Fall back to raw `fetch()` + REST API (see `references/turso-rest-serverless.md`)
 
 ## Feature Decision Tree
 
@@ -64,6 +66,18 @@ Use this to decide which reference file to load:
 **Need to query an existing Turso Cloud database via HTTP?** (Python/curl, no SDK)
 → Read `references/turso-cloud-rest-api.md`
 
+**Need to query Turso Cloud from serverless edge functions?** (Next.js, Vercel, Cloudflare Workers, Deno Deploy — JavaScript/TypeScript with `fetch()`)
+→ Read `references/turso-rest-serverless.md`
+
+**Need to store search criteria, track execution runs, and deduplicate results?** (watchdog/monitor/saved-search schema patterns, Turso REST numeric-string gotchas, JSON arrays in TEXT columns, ON CONFLICT upsert)
+→ Read `references/watchdog-schema-patterns.md`
+
+**Need to upsert data without overwriting existing values with NULLs?** (multi-source pipeline, partial data across runs, COALESCE selective update)
+→ Read `references/upsert-coalesce-pattern.md`
+
+**Need to implement user-controlled sort on a listing page?** (dynamic ORDER BY, SQL injection prevention via whitelist, COALESCE for null ordering)
+→ Read `references/dynamic-order-by-whitelist.md`
+
 ## SDK Decision Tree
 
 **JavaScript / TypeScript / Node.js?** (local-only or embedded database)
@@ -73,7 +87,7 @@ Use this to decide which reference file to load:
 → Use `@tursodatabase/sync` instead — same API as `@tursodatabase/database` plus push/pull. See `sdks/javascript.md` for API and `references/sync.md` for sync operations.
 
 **Serverless / Edge functions?** (Cloudflare Workers, Vercel, Deno Deploy, remote HTTP connection)
-→ Read `sdks/serverless.md`
+→ Try `@tursodatabase/serverless` first (read `sdks/serverless.md`). If it fails with opaque HTTP 400 errors, fall back to raw `fetch()` + REST API (read `references/turso-rest-serverless.md`)
 
 **Browser / WebAssembly / WASM?**
 → Read `sdks/wasm.md`
@@ -186,7 +200,11 @@ Official docs: **https://docs.turso.tech** (Mintlify — append `.md` to any URL
 | `references/encryption.md` | Page-level encryption: ciphers, key setup, URI format |
 | `references/sync.md` | Remote sync: push/pull, conflict resolution, bootstrap, WAL streaming |
 | `references/turso-cloud-rest-api.md` | Direct HTTP REST API: v2/pipeline endpoint, auth, recipes in Python and bash for Turso Cloud without an SDK |
+| `references/turso-rest-serverless.md` | Turso REST API from serverless/edge: fetch() + /v2/pipeline in JavaScript/TypeScript (Next.js, Vercel, Cloudflare Workers). Use when @tursodatabase/serverless SDK fails |
 | `references/turso-cloud-admin-api.md` | Create databases and generate auth tokens via REST API (no CLI). Python+curl recipes for programmatic DB creation |
+| `references/watchdog-schema-patterns.md` | Schema patterns for config-driven watchdogs: JSON arrays in TEXT, ON CONFLICT upsert, execution metadata, Turso REST numeric-string gotchas |
+| `references/upsert-coalesce-pattern.md` | Selective-column upsert with COALESCE — keep existing values when new data has NULLs across multi-source pipeline runs |
+| `references/dynamic-order-by-whitelist.md` | Safe dynamic ORDER BY for listing pages — whitelist map, COALESCE for null ordering, TypeScript/Python implementations |
 | `sdks/javascript.md` | @tursodatabase/database: connect, prepare, run/get/all/iterate |
 | `sdks/serverless.md` | @tursodatabase/serverless: fetch()-based driver for Turso Cloud, edge/serverless |
 | `sdks/wasm.md` | @tursodatabase/database-wasm: browser WASM, OPFS, sync-wasm |
