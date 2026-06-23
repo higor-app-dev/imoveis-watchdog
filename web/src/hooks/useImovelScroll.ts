@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import useSWRInfinite from "swr/infinite";
+import { fetcher } from "@/lib/fetcher";
+import { useMemo, useCallback } from "react";
 import type { ImovelData } from "@/components/ImovelCard";
 
 interface UseImovelScrollOptions {
@@ -31,114 +33,80 @@ interface UseImovelScrollReturn {
   loadMore: () => void;
 }
 
+const PAGE_SIZE = 24;
+
 export function useImovelScroll({
   baseUrl,
-  perPage = 20,
+  perPage = PAGE_SIZE,
   extraParams = {},
 }: UseImovelScrollOptions): UseImovelScrollReturn {
-  const [imoveis, setImoveis] = useState<ImovelData[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const offsetRef = useRef(0);
-  const hasMoreRef = useRef(true);
-  const mountedRef = useRef(true);
-  const keyRef = useRef(0); // increments on reset to cancel stale requests
+  // Stable key for the extra params — JSON stringified so useSWRInfinite re-creates
+  // the fetcher when params change (which triggers a reset)
+  const paramsKey = useMemo(() => JSON.stringify(extraParams), [extraParams]);
 
-  const buildUrl = useCallback(
-    (offset: number) => {
+  const getKey = useCallback(
+    (pageIndex: number, previousPageData: { imoveis: ImovelData[] } | null) => {
+      // reached the end
+      if (previousPageData && previousPageData.imoveis.length === 0) return null;
+      // first page
+      const offset = pageIndex * perPage;
       const q = new URLSearchParams();
       q.set("limit", String(perPage));
       q.set("offset", String(offset));
       for (const [k, v] of Object.entries(extraParams)) {
         if (v) q.set(k, v);
       }
-      return `${baseUrl}?${q}`;
+      // Include paramsKey as a cache-busting signal so SWR treats changes as a new key
+      const url = `${baseUrl}?${q}`;
+      return `${url}&_key=${paramsKey}`;
     },
-    [baseUrl, perPage, extraParams]
+    [baseUrl, perPage, extraParams, paramsKey]
   );
 
-  const fetchPage = useCallback(
-    async (offset: number, append: boolean, key: number) => {
-      try {
-        const res = await fetch(buildUrl(offset));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (!mountedRef.current || key !== keyRef.current) return;
-
-        const items: ImovelData[] = data.imoveis ?? data ?? [];
-        const totalCount = data.total ?? items.length;
-
-        if (append) {
-          setImoveis((prev) => [...prev, ...items]);
-        } else {
-          setImoveis(items);
-        }
-        setTotal(totalCount);
-        hasMoreRef.current = offset + perPage < totalCount;
-        offsetRef.current = offset + perPage;
-      } catch (err) {
-        if (mountedRef.current && key === keyRef.current) {
-          setError(err instanceof Error ? err.message : "Erro ao carregar");
-        }
+  const { data, error, isLoading, isValidating, setSize, size, mutate } =
+    useSWRInfinite<{ imoveis: ImovelData[]; total: number }>(
+      getKey,
+      fetcher,
+      {
+        revalidateFirstPage: false,
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        dedupingInterval: 5_000,
       }
-    },
-    [buildUrl, perPage]
+    );
+
+  // Flatten all pages into one array
+  const imoveis = useMemo(
+    () => (data ? data.flatMap((page) => page.imoveis) : []),
+    [data]
   );
 
-  // Initial load
-  useEffect(() => {
-    mountedRef.current = true;
-    keyRef.current += 1;
-    const key = keyRef.current;
-    setLoading(true);
-    setError(null);
-    fetchPage(0, false, key).finally(() => {
-      if (mountedRef.current && key === keyRef.current) {
-        setLoading(false);
-      }
-    });
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [fetchPage]);
+  // Total from first page
+  const total = data?.[0]?.total ?? 0;
+
+  // Determine if there are more pages to load
+  const hasMore = imoveis.length < total;
+
+  // "loadingMore" = currently fetching a page that is NOT the first one
+  const loadingMore = isValidating && size > 0 && imoveis.length > 0;
 
   const loadMore = useCallback(() => {
-    if (!hasMoreRef.current || loadingMore) return;
-    setLoadingMore(true);
-    const key = keyRef.current;
-    fetchPage(offsetRef.current, true, key).finally(() => {
-      if (mountedRef.current && key === keyRef.current) {
-        setLoadingMore(false);
-      }
-    });
-  }, [fetchPage, loadingMore]);
+    if (!hasMore || isValidating) return;
+    setSize((s) => s + 1);
+  }, [hasMore, isValidating, setSize]);
 
   const reset = useCallback(() => {
-    keyRef.current += 1;
-    const key = keyRef.current;
-    offsetRef.current = 0;
-    hasMoreRef.current = true;
-    setImoveis([]);
-    setLoading(true);
-    setError(null);
-    fetchPage(0, false, key).finally(() => {
-      if (mountedRef.current && key === keyRef.current) {
-        setLoading(false);
-      }
-    });
-  }, [fetchPage]);
-
-  const hasMore = hasMoreRef.current && offsetRef.current < total;
+    mutate(undefined, { revalidate: false });
+    setSize(1);
+  }, [mutate, setSize]);
 
   return {
     imoveis,
     total,
-    loading,
+    loading: isLoading,
     loadingMore,
     hasMore,
-    error,
+    error: error ? (error instanceof Error ? error.message : "Erro ao carregar") : null,
     reset,
     loadMore,
   };

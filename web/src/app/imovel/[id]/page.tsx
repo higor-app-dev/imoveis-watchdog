@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -24,8 +24,8 @@ import {
   ChevronRight,
   Grid3X3,
 } from "lucide-react";
-import type { ImovelData } from "@/components/ImovelCard";
 import { formatPrice, formatDate } from "@/components/ImovelCard";
+import { useImovel } from "@/hooks/useImovel";
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
   return (
@@ -98,7 +98,6 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Image wrapper with swipe animation */}
       <div
         className="size-full transition-transform duration-150"
         style={
@@ -114,12 +113,10 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
         />
       </div>
 
-      {/* Counter badge */}
       <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full backdrop-blur-sm pointer-events-none">
         {current + 1} / {total}
       </div>
 
-      {/* Nav arrows */}
       {total > 1 && (
         <>
           <button
@@ -139,7 +136,6 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
         </>
       )}
 
-      {/* Thumbnail dots */}
       {total > 1 && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
           {images.map((_, i) => (
@@ -163,22 +159,9 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
 export default function ImovelDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(params.id as string);
-  const [imovel, setImovel] = useState<ImovelData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { imovel, loading, error } = useImovel(id);
   const [showMap, setShowMap] = useState(false);
 
-  useEffect(() => {
-    fetch(`/api/imoveis/${encodeURIComponent(id)}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Not found");
-        return r.json();
-      })
-      .then(setImovel)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  // Build image list from fotos JSON or fall back to foto_url
   const images: string[] = (() => {
     if (!imovel) return [];
     if (imovel.fotos) {
@@ -201,7 +184,10 @@ export default function ImovelDetailPage() {
   if (!imovel) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-xl font-bold mb-2">Imóvel não encontrado</h1>
+        <h1 className="text-xl font-bold mb-2">
+          {error ? "Erro ao carregar" : "Imóvel não encontrado"}
+        </h1>
+        {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
         <Link href="/" className="text-sm text-[var(--primary)] hover:underline">
           ← Voltar ao início
         </Link>
@@ -228,7 +214,6 @@ export default function ImovelDetailPage() {
             <ImageSlider images={images} title={title} />
           </div>
 
-          {/* Gallery button */}
           {images.length > 1 && (
             <Link
               href={`/imovel/${encodeURIComponent(id)}/galeria`}
@@ -239,7 +224,6 @@ export default function ImovelDetailPage() {
             </Link>
           )}
 
-          {/* Map */}
           {imovel.latitude && imovel.longitude && (
             <div className="mt-4">
               <button
@@ -266,7 +250,6 @@ export default function ImovelDetailPage() {
 
         {/* Info Panel */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Badges + Header */}
           <div>
             <div className="flex flex-wrap gap-1.5 mb-3">
               <Badge color="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
@@ -287,11 +270,9 @@ export default function ImovelDetailPage() {
                 </Badge>
               )}
             </div>
-
             <h1 className="text-lg font-bold leading-snug mb-1">{title}</h1>
           </div>
 
-          {/* Main Price */}
           <div className="rounded-xl bg-[var(--muted)] p-4">
             {imovel.preco_venda ? (
               <div className="text-center">
@@ -312,11 +293,8 @@ export default function ImovelDetailPage() {
             )}
           </div>
 
-          {/* Details */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
-              Detalhes
-            </h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">Detalhes</h2>
             <div className="divide-y divide-[var(--border)]">
               <DetailRow icon={<Ruler className="size-4" />} label="Área" value={imovel.area_m2 ? `${imovel.area_m2} m²` : "—"} />
               <DetailRow icon={<Bed className="size-4" />} label="Quartos" value={imovel.quartos} />
@@ -331,11 +309,8 @@ export default function ImovelDetailPage() {
             </div>
           </div>
 
-          {/* Location */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
-              Localização
-            </h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">Localização</h2>
             <div className="divide-y divide-[var(--border)]">
               <DetailRow icon={<MapPin className="size-4" />} label="Bairro" value={imovel.bairro} />
               <DetailRow icon={<MapPin className="size-4" />} label="Cidade" value={imovel.cidade} />
@@ -344,11 +319,8 @@ export default function ImovelDetailPage() {
             </div>
           </div>
 
-          {/* History */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
-              Histórico
-            </h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">Histórico</h2>
             <div className="divide-y divide-[var(--border)]">
               <DetailRow icon={<Clock className="size-4" />} label="Primeira vista" value={formatDate(imovel.data_primeira_vista)} />
               <DetailRow icon={<Clock className="size-4" />} label="Última atualização" value={formatDate(imovel.data_ultima_vista)} />
@@ -356,19 +328,13 @@ export default function ImovelDetailPage() {
             </div>
           </div>
 
-          {/* Description */}
           {imovel.descricao && (
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
-                Descrição
-              </h2>
-              <p className="text-sm leading-relaxed text-[var(--foreground)]">
-                {imovel.descricao}
-              </p>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">Descrição</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)]">{imovel.descricao}</p>
             </div>
           )}
 
-          {/* External Link */}
           {imovel.url && (
             <a
               href={imovel.url}

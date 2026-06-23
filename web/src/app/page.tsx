@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,8 +10,10 @@ import {
   ArrowRight,
   Timer,
 } from "lucide-react";
+import useSWR from "swr";
 import { ImovelCard, formatPrice } from "@/components/ImovelCard";
 import type { ImovelData } from "@/components/ImovelCard";
+import { fetcher } from "@/lib/fetcher";
 import InfiniteScroll from "@/components/InfiniteScroll";
 import ProviderFilter from "@/components/ProviderFilter";
 import { useImovelScroll } from "@/hooks/useImovelScroll";
@@ -95,15 +97,11 @@ function HomeContent() {
   const sp = useSearchParams();
   const router = useRouter();
 
-  const [buscas, setBuscas] = useState<Busca[]>([]);
-
-  // Fetch buscas (static, no pagination)
-  useEffect(() => {
-    fetch("/api/buscas/with-results")
-      .then((r) => r.json())
-      .then(setBuscas)
-      .catch(console.error);
-  }, []);
+  // Buscas via SWR
+  const { data: buscas = [] } = useSWR<Busca[]>("/api/buscas/with-results", fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
 
   // Fontes filter from URL
   const fontesRaw = sp.get("fontes") || "";
@@ -121,7 +119,7 @@ function HomeContent() {
     [fontes]
   );
 
-  // Infinite scroll for recent imoveis
+  // Infinite scroll for recent imoveis (now SWR-based internally)
   const { imoveis, total, loading, loadingMore, hasMore, error, loadMore } =
     useImovelScroll({
       baseUrl: "/api/imoveis",
@@ -189,7 +187,6 @@ function HomeContent() {
           </h2>
         </div>
 
-        {/* Provider filter */}
         <div className="mb-4">
           <ProviderFilter selected={fontes} onChange={handleFontesChange} />
         </div>
@@ -231,7 +228,6 @@ function HomeContent() {
         )}
       </section>
 
-      {/* Footer */}
       <footer className="mt-12 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
         Imóveis Watchdog · Dados atualizados pelo pipeline de busca
       </footer>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,7 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import type { ImovelData } from "@/components/ImovelCard";
+import { useImovel } from "@/hooks/useImovel";
 
 function Loading() {
   return (
@@ -24,20 +24,8 @@ function Loading() {
 export default function GaleriaPage() {
   const params = useParams();
   const id = decodeURIComponent(params.id as string);
-  const [imovel, setImovel] = useState<ImovelData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { imovel, loading, error } = useImovel(id);
   const [lightbox, setLightbox] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetch(`/api/imoveis/${encodeURIComponent(id)}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Not found");
-        return r.json();
-      })
-      .then(setImovel)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [id]);
 
   // Build image list
   const images: string[] = (() => {
@@ -51,22 +39,29 @@ export default function GaleriaPage() {
     return imovel.foto_url ? [imovel.foto_url] : [];
   })();
 
-  const title = imovel?.titulo || `${imovel?.bairro ?? ""}${imovel?.cidade ? `, ${imovel.cidade}` : ""}`;
+  const title =
+    imovel?.titulo ||
+    `${imovel?.bairro ?? ""}${imovel?.cidade ? `, ${imovel.cidade}` : ""}`;
 
   if (loading) return <Loading />;
 
   if (!imovel) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-16 text-center">
-        <h1 className="text-xl font-bold mb-2">Imóvel não encontrado</h1>
-        <Link href="/" className="text-sm text-[var(--primary)] hover:underline">← Voltar ao início</Link>
+        <h1 className="text-xl font-bold mb-2">
+          {error ? "Erro ao carregar" : "Imóvel não encontrado"}
+        </h1>
+        {error && <p className="text-sm text-red-500 mb-2">{error}</p>}
+        <Link href="/" className="text-sm text-[var(--primary)] hover:underline">
+          ← Voltar ao início
+        </Link>
       </div>
     );
   }
 
   return (
     <>
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Link
@@ -87,28 +82,30 @@ export default function GaleriaPage() {
           </div>
         </div>
 
-        {/* Image Grid — Pinterest masonry */}
+        {/* Gallery — single column, full width */}
         {images.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] p-16 text-center">
             <ImageIcon className="size-16 mx-auto mb-3 opacity-30 text-[var(--muted-foreground)]" />
-            <p className="text-sm text-[var(--muted-foreground)]">Nenhuma foto disponível</p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Nenhuma foto disponível
+            </p>
           </div>
         ) : (
-          <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-3">
+          <div className="flex flex-col gap-4">
             {images.map((url, i) => (
               <button
                 key={i}
                 onClick={() => setLightbox(i)}
-                className="group relative w-full break-inside-avoid mb-3 rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                className="group relative w-full rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               >
                 <img
                   src={url}
                   alt={`${title} - foto ${i + 1}`}
-                  className="w-full h-auto block group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-auto block group-hover:scale-[1.02] transition-transform duration-300"
                   loading="lazy"
                 />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
-                <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   {i + 1}/{images.length}
                 </div>
               </button>
@@ -134,7 +131,6 @@ export default function GaleriaPage() {
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
           onClick={() => setLightbox(null)}
         >
-          {/* Close */}
           <button
             onClick={() => setLightbox(null)}
             className="absolute top-4 right-4 size-10 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors backdrop-blur-sm"
@@ -143,12 +139,10 @@ export default function GaleriaPage() {
             <X className="size-6" />
           </button>
 
-          {/* Counter */}
           <div className="absolute top-4 left-4 bg-black/50 text-white text-sm px-3 py-1 rounded-full backdrop-blur-sm">
             {lightbox + 1} / {images.length}
           </div>
 
-          {/* Previous */}
           {images.length > 1 && (
             <button
               onClick={(e) => {
@@ -162,7 +156,6 @@ export default function GaleriaPage() {
             </button>
           )}
 
-          {/* Image */}
           <img
             src={images[lightbox]}
             alt={`${title} - foto ${lightbox + 1}`}
@@ -170,7 +163,6 @@ export default function GaleriaPage() {
             onClick={(e) => e.stopPropagation()}
           />
 
-          {/* Next */}
           {images.length > 1 && (
             <button
               onClick={(e) => {
@@ -184,7 +176,6 @@ export default function GaleriaPage() {
             </button>
           )}
 
-          {/* Thumbnail strip */}
           {images.length > 3 && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 max-w-[80vw] overflow-x-auto px-2 py-2 rounded-full bg-black/30 backdrop-blur-sm">
               {images.map((url, i) => (
@@ -195,7 +186,9 @@ export default function GaleriaPage() {
                     setLightbox(i);
                   }}
                   className={`shrink-0 size-12 rounded-lg overflow-hidden border-2 transition-all ${
-                    i === lightbox ? "border-white scale-110" : "border-transparent opacity-50 hover:opacity-80"
+                    i === lightbox
+                      ? "border-white scale-110"
+                      : "border-transparent opacity-50 hover:opacity-80"
                   }`}
                 >
                   <img src={url} alt="" className="size-full object-cover" />

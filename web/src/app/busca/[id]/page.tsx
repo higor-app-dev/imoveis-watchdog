@@ -1,14 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useState, useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
   Search,
 } from "lucide-react";
+import useSWR from "swr";
 import { ImovelCard, formatPrice } from "@/components/ImovelCard";
-import type { ImovelData } from "@/components/ImovelCard";
+import { fetcher } from "@/lib/fetcher";
 import SortBar from "@/components/SortBar";
 import type { SortField, SortOrder } from "@/components/SortBar";
 import InfiniteScroll from "@/components/InfiniteScroll";
@@ -66,15 +67,11 @@ function BuscaContent() {
   const router = useRouter();
   const id = Number(params.id);
 
-  const [busca, setBusca] = useState<Busca | null>(null);
-
-  // Fetch busca metadata separately
-  useEffect(() => {
-    fetch(`/api/buscas/${id}`)
-      .then((r) => r.json())
-      .then((data) => setBusca(data))
-      .catch(console.error);
-  }, [id]);
+  // Busca metadata via SWR
+  const { data: busca } = useSWR<Busca>(`/api/buscas/${id}`, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
 
   const sort = (sp.get("sort") as SortField) || "data";
   const order = (sp.get("order") as SortOrder) || "desc";
