@@ -1,0 +1,9 @@
+{
+  "name": "imoveis-watchdog-web",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "rootDirectory": "web"
+}

@@ -1,0 +1,11 @@
+.next
+node_modules
+.git
+__pycache__
+*.pyc
+data
+config
+scripts
+skills
+tests
+scrapers
