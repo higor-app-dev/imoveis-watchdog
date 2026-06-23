@@ -380,6 +380,11 @@ def from_quintoandar_safe(
         )
         if isinstance(houses, list) and houses:
             return from_quintoandar_houses(houses, build_id=build_id)
+        if isinstance(houses, dict):
+            house_list = [h for h in houses.values() if isinstance(h, dict)]
+            if house_list:
+                logger.info("Houses extraído de dict (chaveado por ID)")
+                return from_quintoandar_houses(house_list, build_id=build_id)
 
         # Tenta API response
         results = _safe_navigate(payload, "results", "data")
