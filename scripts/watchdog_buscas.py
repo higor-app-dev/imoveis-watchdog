@@ -311,7 +311,11 @@ def executar_busca(
         cidade = item.get("cidade", item.get("municipality", item.get("location_city", "")))
         uf = item.get("uf", item.get("stateCode", item.get("location_state", "")))
         tipo = item.get("tipo", item.get("type", ""))
-        modalidade = busca.get("modalidades", '["compra"]')
+        # Tenta modalidade do item (parser pode ter extraído), fallback para config da busca
+        item_modalidade = str(item.get("modalidade", item.get("category", ""))).strip().lower()
+        if not item_modalidade:
+            modalidades_list = json.loads(busca.get("modalidades", '["compra"]'))
+            item_modalidade = str(modalidades_list[0]).strip().lower() if modalidades_list else "compra"
 
         # ─ Preços: fallback para campos do crawl bruto ─
         preco_venda = item.get("askingPrice", item.get("price", item.get("preco_venda", item.get("salePrice"))))
@@ -377,7 +381,7 @@ def executar_busca(
                 return "NULL"
             return str(v)
 
-        sql = f"""\n        INSERT INTO imoveis_watchdog (id, titulo, fonte, url, endereco, bairro, cidade, uf,\n            tipo, preco_venda, preco_aluguel, condominio, iptu, area_m2, quartos, banheiros,\n            vagas, descricao, foto_url, fotos, latitude, longitude, data_ultima_vista, removido)\n        VALUES ({esc(list_id)}, {esc(titulo)}, {esc(fonte)}, {esc(url)}, {esc(endereco)},\n            {esc(bairro)}, {esc(cidade)}, {esc(uf)}, {esc(tipo)},\n            {esc_null(preco_venda)}, {esc_null(preco_aluguel)}, {esc_null(condominio)},\n            {esc_null(iptu)}, {esc_null(area)}, {esc_null(quartos)},\n            {esc_null(banheiros)}, {esc_null(vagas)}, {esc(descricao)},\n            {esc(foto_url)}, {esc(fotos_json)}, {esc_null(latitude)}, {esc_null(longitude)},\n            datetime('now'), 0)\n        ON CONFLICT(id) DO UPDATE SET\n            data_ultima_vista=datetime('now'),\n            preco_venda=COALESCE(excluded.preco_venda, preco_venda),\n            preco_aluguel=COALESCE(excluded.preco_aluguel, preco_aluguel),\n            condominio=COALESCE(excluded.condominio, condominio),\n            iptu=COALESCE(excluded.iptu, iptu),\n            foto_url=COALESCE(excluded.foto_url, foto_url),\n            fotos=COALESCE(excluded.fotos, fotos),\n            latitude=COALESCE(excluded.latitude, latitude),\n            longitude=COALESCE(excluded.longitude, longitude),\n            removido=0\n        """
+        sql = f"""\n        INSERT INTO imoveis_watchdog (id, titulo, fonte, url, endereco, bairro, cidade, uf,\n            tipo, modalidade, preco_venda, preco_aluguel, condominio, iptu, area_m2, quartos, banheiros,\n            vagas, descricao, foto_url, fotos, latitude, longitude, data_ultima_vista, removido)\n        VALUES ({esc(list_id)}, {esc(titulo)}, {esc(fonte)}, {esc(url)}, {esc(endereco)},\n            {esc(bairro)}, {esc(cidade)}, {esc(uf)}, {esc(tipo)},\n            {esc(item_modalidade)},\n            {esc_null(preco_venda)}, {esc_null(preco_aluguel)}, {esc_null(condominio)},\n            {esc_null(iptu)}, {esc_null(area)}, {esc_null(quartos)},\n            {esc_null(banheiros)}, {esc_null(vagas)}, {esc(descricao)},\n            {esc(foto_url)}, {esc(fotos_json)}, {esc_null(latitude)}, {esc_null(longitude)},\n            datetime('now'), 0)\n        ON CONFLICT(id) DO UPDATE SET\n            data_ultima_vista=datetime('now'),\n            modalidade=COALESCE(excluded.modalidade, modalidade),\n            preco_venda=COALESCE(excluded.preco_venda, preco_venda),\n            preco_aluguel=COALESCE(excluded.preco_aluguel, preco_aluguel),\n            condominio=COALESCE(excluded.condominio, condominio),\n            iptu=COALESCE(excluded.iptu, iptu),\n            foto_url=COALESCE(excluded.foto_url, foto_url),\n            fotos=COALESCE(excluded.fotos, fotos),\n            latitude=COALESCE(excluded.latitude, latitude),\n            longitude=COALESCE(excluded.longitude, longitude),\n            removido=0\n        """
         try:
             _turso(sql)
             # Associa imóvel à busca na tabela de junção
@@ -394,7 +398,7 @@ def executar_busca(
     # 5. Atualizar metadados da busca
     _turso(f"""
         UPDATE buscas_watchdog
-        SET ultima_execucao=datetime('now'), ultimo_total={len(filtrados)}
+        SET ultima_execucao=datetime('now'), ultimo_total={salvos}
         WHERE id={busca_id}
     """)
 
