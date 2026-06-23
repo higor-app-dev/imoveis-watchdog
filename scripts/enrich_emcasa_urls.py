@@ -5,6 +5,8 @@ O EmCasa usa a plataforma Foundation/Garagem AI (cdn.fndn.ai).
 O crawl não salvou listingCode, mas ele é necessário para construir a URL.
 Este script consulta a API Foundation por bairro, extrai listingCode + street,
 combina com os dados no Turso e atualiza as URLs.
+
+Suporta múltiplas cidades (não apenas São Paulo).
 """
 import json
 import os
@@ -26,18 +28,18 @@ PER_PAGE = 250
 
 def _get_turso_creds():
     env = open(os.path.expanduser("~/.hermes/.env")).read()
-    url = token = ""
+    u = token = ""
     for line in env.split("\n"):
         if "TURSO_HERMES_DATA_DB_URL" in line and "=" in line:
-            url = line.split("=", 1)[1].strip()
+            u = line.split("=", 1)[1].strip()
         if "TURSO_HERMES_DATA_DB_TOKEN" in line and "=" in line:
             token = line.split("=", 1)[1].strip()
-    return url, token
+    return u, token
 
 def turso(sql):
-    url, token = _get_turso_creds()
+    u, token = _get_turso_creds()
     payload = json.dumps({"requests": [{"type": "execute", "stmt": {"sql": sql}}]}).encode()
-    req = urllib.request.Request(url + "/v2/pipeline", data=payload,
+    req = urllib.request.Request(u + "/v2/pipeline", data=payload,
         headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
     resp = json.loads(urllib.request.urlopen(req, timeout=30).read())
     r = resp["results"][0]
@@ -53,6 +55,8 @@ def turso(sql):
 
 def slug(s):
     """Converte string para slug usada nas URLs do EmCasa."""
+    if not s:
+        return ""
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii").lower()
     s = re.sub(r"[^a-z0-9\s-]", "", s).strip()
     s = re.sub(r"\s+", "-", s)
@@ -61,8 +65,8 @@ def slug(s):
 
 def build_emcasa_url(uf, cidade, bairro, rua, listing_code):
     """Constrói URL do anúncio original no EmCasa."""
-    uf_slug = slug(uf)
-    cidade_slug = slug(cidade)
+    uf_slug = slug(uf) or "sp"
+    cidade_slug = slug(cidade) or "sao-paulo"
     bairro_slug = slug(bairro)
     rua_slug = slug(rua)
     return f"https://www.emcasa.com/imoveis/{uf_slug}/{cidade_slug}/{bairro_slug}/{rua_slug}/id-{listing_code}"
@@ -86,6 +90,23 @@ def search_foundation(filter_by, page=1):
     nb_pages = max(1, -(-found // PER_PAGE))
     return hits, found, nb_pages
 
+def fetch_all_pages(filter_by):
+    """Busca TODAS as páginas para um filtro, retornando todos os hits."""
+    all_hits = []
+    page = 1
+    while True:
+        try:
+            hits, found, nb_pages = search_foundation(filter_by, page=page)
+            all_hits.extend(hits)
+            if page >= nb_pages:
+                break
+            page += 1
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"    ⚠️  Erro na página {page}: {e}")
+            break
+    return all_hits
+
 # ── Main ───────────────────────────────────────────────────────────────
 
 def main():
@@ -95,91 +116,102 @@ def main():
     )
     print(f"  {len(imoveis)} imóveis EmCasa encontrados")
 
-    # Agrupa por bairro para fazer menos chamadas à API
-    by_bairro: dict[str, list[dict]] = {}
-    for imovel in imoveis:
-        bairro = (imovel.get("bairro") or "").strip()
-        if not bairro:
-            continue
-        # Normaliza bairro para o formato da API
-        bairro_key = bairro.title().strip()
-        if bairro_key not in by_bairro:
-            by_bairro[bairro_key] = []
-        by_bairro[bairro_key].append(imovel)
+    # Filtra apenas os que precisam de correção
+    imoveis_pendentes = [
+        i for i in imoveis
+        if not i.get("url") or "/imovel/" in (i.get("url") or "")
+    ]
+    print(f"  {len(imoveis_pendentes)} pendentes (sem URL ou com formato inválido)")
 
-    print(f"  {len(by_bairro)} bairros únicos: {', '.join(by_bairro.keys())}")
-    print()
+    # Agrupa por {uf, cidade, bairro}
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for im in imoveis_pendentes:
+        key = (
+            (im.get("uf") or "SP").strip().upper(),
+            (im.get("cidade") or "São Paulo").strip(),
+            (im.get("bairro") or "").strip().title(),
+        )
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(im)
+
+    print(f"  {len(groups)} grupos (UF/Cidade/Bairro) únicos\n")
 
     updated = 0
-    errors = 0
+    not_found = 0
 
-    for bairro_nome, imoveis_do_bairro in sorted(by_bairro.items()):
-        print(f"📌 Bairro: {bairro_nome} ({len(imoveis_do_bairro)} imóveis)")
+    for (uf_g, cidade_g, bairro_g), imoveis_g in sorted(groups.items()):
+        print(f"📌 {uf_g}/{cidade_g}/{bairro_g} ({len(imoveis_g)} imóveis)")
 
-        # Busca TODAS as páginas para este bairro
-        filter_by = f"location_state:=SP && location_city:=São Paulo && location_neighborhood:={bairro_nome}"
-
-        all_hits = []
-        page = 1
-        while True:
-            try:
-                hits, found, nb_pages = search_foundation(filter_by, page=page)
-                all_hits.extend(hits)
-                print(f"    Página {page}/{nb_pages} ({len(hits)} hits, total acumulado: {len(all_hits)})")
-                if page >= nb_pages:
-                    break
-                page += 1
-                time.sleep(0.3)
-            except Exception as e:
-                print(f"    ⚠️  Erro na página {page}: {e}")
-                break
+        # Busca da Foundation API
+        filter_by = f"location_state:={uf_g} && location_city:={cidade_g} && location_neighborhood:={bairro_g}"
+        all_hits = fetch_all_pages(filter_by)
 
         if not all_hits:
-            print(f"    ⚠️  Nenhum hit encontrado para {bairro_nome}")
+            # Tenta sem bairro (busca geral na cidade)
+            print(f"    ⚠️  Nenhum hit para {bairro_g}, tentando busca geral na cidade...")
+            filter_by = f"location_state:={uf_g} && location_city:={cidade_g}"
+            all_hits = fetch_all_pages(filter_by)
+
+        if not all_hits:
+            print(f"    ❌ Nada encontrado na Foundation para {cidade_g}/{bairro_g}")
+            not_found += len(imoveis_g)
             continue
 
-        # Indexa por {rua_normalizada}: {listingCode}
+        # Indexa hits por {rua_normalizada}: {listingCode}
         index: dict[str, int] = {}
         for hit in all_hits:
             doc = hit.get("document", hit)
             lc = doc.get("listingCode")
             street = doc.get("location_street", doc.get("street", ""))
             if lc and street:
-                key = slug(street)
-                index[key] = lc
+                index[slug(street)] = lc
 
-        # Para cada imóvel, busca o listingCode pela rua
-        for imovel in imoveis_do_bairro:
-            rua = (imovel.get("endereco") or "").strip()
+        print(f"    Indexados {len(index)} ruas de {len(all_hits)} hits")
+
+        # Match com cada imóvel
+        group_updated = 0
+        for im in imoveis_g:
+            rua = (im.get("endereco") or "").strip()
             rua_key = slug(rua)
             lc = index.get(rua_key)
 
             if not lc:
-                # Tenta match parcial
+                # Fallback: match parcial (sem o prefixo "Rua"/"Avenida")
                 for key, val in index.items():
-                    if rua_key in key or key in rua_key:
+                    if rua_key and (rua_key in key or key in rua_key):
                         lc = val
                         break
 
+            if not lc:
+                # Fallback: match por primeiras letras
+                for key, val in index.items():
+                    if rua_key and len(rua_key) > 5:
+                        if rua_key[:8] in key or key[:8] in rua_key:
+                            lc = val
+                            break
+
             if lc:
-                # Constrói URL
-                cidade = imovel.get("cidade", "São Paulo")
-                uf = imovel.get("uf", "SP")
-                url = build_emcasa_url(uf, cidade, bairro_nome, rua, lc)
+                url = build_emcasa_url(uf_g, cidade_g, bairro_g, rua, lc)
                 try:
-                    eid = imovel["id"].replace("'", "''")
+                    eid = im["id"].replace("'", "''")
                     turso(f"UPDATE imoveis_watchdog SET url='{url}' WHERE id='{eid}'")
-                    print(f"    ✅ {imovel['id'][:20]:20} → {url}")
-                    updated += 1
+                    print(f"    ✅ {im['id'][:30]:30} → {url}")
+                    group_updated += 1
                 except Exception as e:
-                    print(f"    ❌ Erro salvando {imovel['id']}: {e}")
-                    errors += 1
+                    print(f"    ❌ Erro salvando {im['id']}: {e}")
             else:
-                print(f"    ⚠️  Sem listingCode para {imovel['id'][:20]:20} ({rua})")
-                errors += 1
+                # Último fallback: matching por tamanho de rua + bairro
+                # (pula se não achou nada mesmo depois de todos os fallbacks)
+                print(f"    ⚠️  Sem listingCode para {im['id'][:30]:30} ({rua})")
+                not_found += 1
+
+        updated += group_updated
+        print(f"    Grupo: {group_updated}/{len(imoveis_g)} atualizados\n")
 
     print(f"\n{'='*50}")
-    print(f"✅ {updated} URLs atualizadas, {errors} erros")
+    print(f"✅ {updated} URLs atualizadas")
+    print(f"❌ {not_found} imóveis sem correspondência na Foundation API")
     return 0
 
 if __name__ == "__main__":
