@@ -65,6 +65,14 @@ def show_info() -> None:
         print(f"  ✗ navigation not available: {e}")
 
     try:
+        from pagination import paginate_and_collect, get_listing_count
+        print("  ✓ pagination loaded")
+        print(f"    - paginate_and_collect (page, extract_fn, max_pages=5)")
+        print(f"    - get_listing_count     (page → int)")
+    except ImportError as e:
+        print(f"  ✗ pagination not available: {e}")
+
+    try:
         from validacao import validar_lote
         print("  ✓ validacao loaded")
         print(f"    - validar_lote (batch validation)")
@@ -118,6 +126,10 @@ def main() -> None:
         print("  navigate_to_search       : sync (browser, city, type, txn, [neighbourhood])")
         print("  navigate_to_search_async : async (browser, city, type, txn, [neighbourhood])")
         print("  navigate_to_search_safe  : sync wrapper, returns (ok, page, msg)")
+        print()
+        print("Pagination functions (skills/quinto-andar/pagination.py):")
+        print("  paginate_and_collect : (page, extract_fn, max_pages=5) → list[dict]")
+        print("  get_listing_count    : (page) → int")
         print()
         print("Portal slug: quinto_andar")
         print("Display name: QuintoAndar")

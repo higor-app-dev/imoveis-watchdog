@@ -33,20 +33,31 @@ def load_listings(patterns: list[str] | None = None) -> list[dict]:
         try:
             with open(fpath) as f:
                 data = json.load(f)
-            if isinstance(data, list):
-                for item in data:
-                    if isinstance(item, dict) and (
-                        item.get("fonte") or item.get("titulo") or item.get("preco_venda")
-                    ):
-                        listings.append(item)
-            elif isinstance(data, dict):
-                # Try common keys for embedded listings
-                for key in ("results", "listings", "imoveis", "data", "hits"):
-                    sub = data.get(key, [])
-                    if isinstance(sub, list):
-                        listings.extend(
-                            i for i in sub if isinstance(i, dict)
-                        )
+
+            def extract(obj, collected):
+                if isinstance(obj, list):
+                    for item in obj:
+                        if isinstance(item, dict):
+                            if item.get("fonte") or item.get("titulo") or item.get("preco_venda") is not None:
+                                collected.append(item)
+                            else:
+                                extract(item, collected)
+                elif isinstance(obj, dict):
+                    if obj.get("fonte") or obj.get("titulo") or obj.get("preco_venda") is not None:
+                        collected.append(obj)
+                    for key in ("regions", "results", "listings", "imoveis", "data", "hits"):
+                        sub = obj.get(key)
+                        if isinstance(sub, list):
+                            for item in sub:
+                                if isinstance(item, dict):
+                                    extract(item, collected)
+                        elif isinstance(sub, dict):
+                            for rkey, rval in sub.items():
+                                if isinstance(rval, dict):
+                                    extract(rval, collected)
+                return collected
+
+            listings.extend(extract(data, []))
         except (json.JSONDecodeError, OSError):
             pass
     

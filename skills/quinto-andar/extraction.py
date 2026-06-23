@@ -59,7 +59,11 @@ def extract_listings(page: Any, timeout_ms: int = 15000) -> list[dict[str, Any]]
     Tries, in order:
       1. Next.js data route fetch (fastest, richest data)
       2. __NEXT_DATA__ embedded in SSR HTML
-      3. DOM card parsing (last resort)
+      3. DOM card parsing (generic listing-card selectors)
+      4. house-card-container DOM parsing (catches dynamically loaded cards
+         from "Ver mais" pagination that the data route doesn't include)
+      All successful strategies are combined and deduplicated by id —
+      strategy 4 fills in cards that only exist in the DOM.
 
     Args:
         page: A Playwright Page object loaded by navigate_to_search().
@@ -76,12 +80,18 @@ def extract_listings(page: Any, timeout_ms: int = 15000) -> list[dict[str, Any]]
         logger.warning("extract_listings: page is None")
         return []
 
+    combined: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
     # ── 1. Fast path: Next.js data route ──────────────────────────────
     try:
         result = _try_data_route(page, timeout_ms)
         if result:
             logger.info(f"Data route: {len(result)} listings extracted")
-            return result
+            combined.extend(result)
+            seen_ids.update(
+                str(lst.get("id") or "") for lst in result if lst.get("id")
+            )
     except Exception as exc:
         logger.warning(f"Data route failed: {exc}")
 
@@ -89,19 +99,55 @@ def extract_listings(page: Any, timeout_ms: int = 15000) -> list[dict[str, Any]]
     try:
         result = _try_ssr_data(page, timeout_ms)
         if result:
-            logger.info(f"__NEXT_DATA__: {len(result)} listings extracted")
-            return result
+            # Only add listings not already captured by strategy 1
+            new = [lst for lst in result
+                   if str(lst.get("id") or "") not in seen_ids]
+            if new:
+                logger.info(f"__NEXT_DATA__: {len(new)} new listings")
+                combined.extend(new)
+                seen_ids.update(
+                    str(lst.get("id") or "") for lst in new if lst.get("id")
+                )
     except Exception as exc:
         logger.warning(f"__NEXT_DATA__ failed: {exc}")
 
-    # ── 3. Last resort: DOM parsing ────────────────────────────────────
+    # ── 3. DOM card parsing ───────────────────────────────────────────
+    # Note: this strategy is intentionally skipped by default for QuintoAndar
+    # because the generic a[href*="/imovel/"] selector also matches navigation
+    # links. Strategy 4 (house-card-container) handles dynamic cards better.
+    # We run it only if the previous strategies got nothing.
+    if not combined:
+        try:
+            result = _try_dom_parse(page, timeout_ms)
+            if result:
+                new = [lst for lst in result
+                       if str(lst.get("id") or "") not in seen_ids]
+                if new:
+                    logger.info(f"DOM parse: {len(new)} new listings")
+                    combined.extend(new)
+        except Exception as exc:
+            logger.warning(f"DOM parse failed: {exc}")
+
+    # ── 4. house-card-container DOM parsing ───────────────────────────
+    # This catches dynamically loaded cards from the "Ver mais" pagination
+    # that aren't in the data route or __NEXT_DATA__.
     try:
-        result = _try_dom_parse(page, timeout_ms)
+        result = _try_house_card_container(page)
         if result:
-            logger.info(f"DOM parse: {len(result)} listings extracted")
-            return result
+            new = [lst for lst in result
+                   if str(lst.get("id") or "") not in seen_ids]
+            if new:
+                logger.info(
+                    f"house-card-container DOM: {len(new)} new listings "
+                    f"(from {len(result)} total cards in DOM)"
+                )
+                combined.extend(new)
     except Exception as exc:
-        logger.warning(f"DOM parse failed: {exc}")
+        logger.warning(f"house-card-container DOM failed: {exc}")
+
+    if combined:
+        logger.info(f"Total: {len(combined)} unique listings extracted")
+        return combined
 
     logger.warning("All extraction strategies failed — returning empty list")
     return []
@@ -389,6 +435,162 @@ def _try_dom_parse(page: Any, timeout_ms: int) -> list[dict[str, Any]]:
         lst.setdefault("photos", [])
         lst.setdefault("amenities", [])
         lst.setdefault("shortSaleDescription", "")
+
+    return listings
+
+
+# ── Strategy 4: house-card-container DOM parsing ─────────────────────────
+
+
+def _try_house_card_container(page: Any) -> list[dict[str, Any]]:
+    """
+    Parse ``[data-testid="house-card-container"]`` elements from the DOM.
+
+    This catches dynamically loaded cards added by the "Ver mais" button
+    that aren't captured by the data route or __NEXT_DATA__.  Each card's
+    visible text is parsed for price, area, bedrooms, bathrooms, parking,
+    and neighbourhood.
+
+    Falls back gracefully to returning whatever fields can be extracted.
+
+    Returns list of dicts (same schema as other strategies), empty on fail.
+    """
+    js_code = """
+    (() => {
+        try {
+            const cards = document.querySelectorAll(
+                '[data-testid="house-card-container"]'
+            );
+            if (cards.length === 0) return { error: "No house-card-container found" };
+
+            const listings = [];
+            const seen = new Set();
+
+            cards.forEach((card) => {
+                // The card wraps an <a> with the listing href
+                const link = card.closest('a') || card.querySelector('a');
+                const href = link ? link.getAttribute('href') || '' : '';
+                if (seen.has(href)) return;
+                seen.add(href);
+
+                const text = card.textContent || '';
+
+                // Extract listing ID from href: /imovel/<id>/...
+                const listing = {};
+                const idMatch = href.match(/\\/imovel\\/(\\d+)/);
+                if (idMatch) listing.id = idMatch[1];
+
+                if (href) {
+                    listing.url = href.startsWith('http')
+                        ? href
+                        : 'https://www.quintoandar.com.br' + href;
+                }
+
+                // Determine rent vs buy from URL
+                const isRent = href.includes('/alugar/') ||
+                    window.location.pathname.includes('/alugar/');
+
+                // Extract price (R$ X.XXX or R$ XXX.XXX)
+                const priceMatch = text.match(
+                    /R\\$\\s*([\\d.]+)/i
+                );
+                if (priceMatch) {
+                    const priceVal = parseFloat(priceMatch[1].replace(/\\./g, ''));
+                    if (!isNaN(priceVal)) {
+                        if (isRent) {
+                            listing.rentPrice = priceVal;
+                        } else {
+                            listing.salePrice = priceVal;
+                        }
+                    }
+                }
+
+                // Extract area: N m²
+                const areaMatch = text.match(
+                    /(\\d+)\\s*m[²2]/i
+                );
+                if (areaMatch) listing.area = parseFloat(areaMatch[1]);
+
+                // Extract bedrooms: N quartos
+                const bedMatch = text.match(
+                    /(\\d+)\\s*quarto/i
+                );
+                if (bedMatch) listing.bedrooms = parseInt(bedMatch[1], 10);
+
+                // Extract bathrooms: N banheiros or N suíte
+                const bathMatch = text.match(
+                    /(\\d+)\\s*banheiro/i
+                );
+                if (bathMatch) listing.bathrooms = parseInt(bathMatch[1], 10);
+
+                // Extract parking: N vaga
+                const parkMatch = text.match(
+                    /(\\d+)\\s*vaga/i
+                );
+                if (parkMatch) listing.parkingSpots = parseInt(parkMatch[1], 10);
+
+                // Extract neighbourhood/address
+                // The address is usually the last part after " · "
+                const parts = text.split('·');
+                const lastPart = parts[parts.length - 1]?.trim();
+                if (lastPart && lastPart.length > 3 && lastPart.length < 100) {
+                    listing.address = lastPart;
+                }
+
+                // Look for the neighbourhood part (second from last before address)
+                if (parts.length >= 2) {
+                    const nbCandidate = parts[parts.length - 2]?.trim();
+                    // Neighbourhood typically has 2-4 words, no numbers
+                    if (nbCandidate &&
+                        nbCandidate.length > 3 &&
+                        nbCandidate.length < 60 &&
+                        !/\\d/.test(nbCandidate)) {
+                        listing.neighbourhood = nbCandidate;
+                    }
+                }
+
+                // Condo + IPTU
+                const condoMatch = text.match(
+                    /R\\$\\s*([\\d.]+)\\s*Condo/i
+                );
+                if (condoMatch) {
+                    const condoVal = parseFloat(condoMatch[1].replace(/\\./g, ''));
+                    if (!isNaN(condoVal)) {
+                        listing.condoIptu = { condoFee: condoVal };
+                    }
+                }
+
+                // Description / title — first sentence of text
+                const firstSentence = text.split('.')[0]?.trim();
+                if (firstSentence && firstSentence.length > 10) {
+                    listing.shortSaleDescription = firstSentence;
+                }
+
+                // Defaults
+                listing.salePrice = listing.salePrice || null;
+                listing.rentPrice = listing.rentPrice || null;
+                listing.type = '';
+                listing.photos = [];
+                listing.amenities = [];
+
+                listings.push(listing);
+            });
+
+            return { listings };
+
+        } catch (err) {
+            return { error: err.message || String(err) };
+        }
+    })()
+    """
+
+    raw = page.evaluate(js_code)
+    if not isinstance(raw, dict) or "error" in raw:
+        return []
+
+    listings = raw.get("listings", [])
+    if not isinstance(listings, list):
+        return []
 
     return listings
 

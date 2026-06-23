@@ -1,18 +1,19 @@
 ---
 name: emcasa
-description: "Skill de extração de dados do EmCasa — duas abordagens: (1) API Foundation/Garagem AI (cdn.fndn.ai) com cliente HTTP, paginação e cache, (2) SSR Algolia InstantSearch via extração de JSON do HTML + parser de hits. Schema unificado de 28 campos, detecção de redução de preço, crawl completo SP+RJ."
+description: "Skill de extração de dados do EmCasa — três abordagens: (1) API Foundation/Garagem AI (cdn.fndn.ai) com cliente HTTP, paginação e cache, (2) Pipeline unificado com PaginatedCache + TokenBucket + emcasa_collect.py para crawl completo em lote, (3) SSR Algolia InstantSearch via extração de JSON do HTML + parser de hits. Schema unificado de 28 campos, facet stats, detecção de redução de preço."
 ---
 
 # EmCasa — Extração de Imóveis
 
 ## Visão Geral
 
-O EmCasa (emcasa.com) é um Next.js que oferece **duas formas** de extrair dados dos imóveis:
+O EmCasa (emcasa.com) é um Next.js que oferece **três formas** de extrair dados dos imóveis:
 
-1. **API Foundation/Garagem AI** (`cdn.fndn.ai`) — API pública REST sem autenticação, via POST
-2. **Algolia InstantSearch (SSR)** — JSON embutido no HTML via `window[Symbol.for("InstantSearchInitialResults")]`
+1. **API Foundation/Garagem AI** (cdn.fndn.ai) — API pública REST sem autenticação, via POST
+2. **Pipeline Unificado** — scripts/emcasa_collect.py com PaginatedCache + TokenBucket + EmCasaClient
+3. **Algolia InstantSearch (SSR)** — JSON embutido no HTML via window[Symbol.for("InstantSearchInitialResults")]
 
-Ambas as abordagens estão implementadas e podem ser usadas conforme a necessidade.
+Todas as abordagens estão implementadas e podem ser usadas conforme a necessidade.
 
 ## Arquivos
 
@@ -20,15 +21,24 @@ Ambas as abordagens estão implementadas e podem ser usadas conforme a necessida
 |---------|-----------|
 | `config.yaml` | Configuração — cidades, schema, paginação, cache |
 | `__init__.py` | Exporta todas as funções públicas (16 símbolos) |
-| `emcasa_api.py` | Cliente HTTP da API Foundation (POST) com paginação, cache e CLI |
+| `emcasa_api.py` | Cliente HTTP da API Foundation (POST) com paginação, cache dual (PageCache + PaginatedCache) e rate limiting dual (delay simples + TokenBucket) |
 | `emcasa_parser.py` | Parser da API Foundation para schema unificado `Imovel` |
 | `extract_page.py` | Extração do JSON do Algolia do HTML SSR (curl + brace-matching) |
 | `algolia_parser.py` | Parser de hits do Algolia para schema unificado (28 campos) |
-| `test_emcasa_api.py` | Testes unitários + integração da API Foundation |
+| `test_emcasa_api.py` | Testes unitários + integração da API Foundation (22 unitários + 3 integração) |
 | `test_algolia_parser.py` | 8 testes — parser, fallbacks, priceChangePercent, coordenadas |
 | `test_extract_page.py` | 20 testes (pytest) — extração SP/RJ, facets, validação |
-| `crawl.py` (em `scripts/`) | Orquestrador de crawl completo (ambas cidades, filtros) |
-| `requirements.txt` | Zero dependências externas |
+
+**Scripts externos (projeto raiz):**
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `scripts/emcasa_collect.py` | Driver unificado de coleta — lê watchdog.yaml, integra PaginatedCache + TokenBucket, coleta todas as regiões configuradas |
+| `scripts/facet_stats.py` | Computa estatísticas de facets (preço min/max, área min/max, quartos, tipos, fontes, etc.) de datasets coletados |
+| `skills/cache/cache_engine.py` | PaginatedCache — cache de páginas com TTL, namespace, escrita atômica, thread-safe (26 testes) |
+| `skills/rate_limiter/rate_limiter.py` | TokenBucket + AsyncTokenBucket — rate limiting thread-safe com wrapped HTTP clients (30 testes) |
+| `config/targets.yaml` | Alvos de busca multi-portal (EmCasa, QuintoAndar, etc.) |
+| `watchdog.yaml` | Config do watchdog — cidades, bairros, price_ranges, cache |
 
 ---
 
@@ -109,6 +119,133 @@ for raw_hit in result.hits:
     imovel = parse_hit(raw_hit)
     print(f"{imovel['titulo']} - R$ {imovel['preco_venda']}")
 ```
+
+---
+
+## Abordagem 3: Pipeline Unificado (emcasa_collect.py)
+
+O **pipeline unificado** integra PaginatedCache (cache de páginas) + TokenBucket (rate limiter) + EmCasaClient em um único driver de coleta que lê a configuração do `watchdog.yaml` e itera por todas as combinações de cidade × bairro × faixa de preço.
+
+### Arquitetura
+
+```
+scripts/emcasa_collect.py          ← orquestrador (lê watchdog.yaml, dirige coleta)
+skills/
+├── cache/cache_engine.py          ← PaginatedCache (TTL, namespace, thread-safe)
+├── rate_limiter/rate_limiter.py   ← TokenBucket (thread-safe, 30 testes)
+└── emcasa/
+    ├── emcasa_api.py              ← EmCasaClient (aceita ambas as formas)
+    └── emcasa_parser.py           ← parse_hit() para schema unificado
+watchdog.yaml                      ← configuração: cidades, bairros, price_ranges, cache
+data/
+├── cache/                         ← cache de páginas (reusado entre runs)
+└── results/                       ← datasets coletados (JSON timestamped)
+```
+
+### Configuração (watchdog.yaml)
+
+```yaml
+watchdog:
+  cities:
+    - name: "São Paulo"
+      state: "SP"
+    - name: "Rio de Janeiro"
+      state: "RJ"
+
+  neighborhoods:
+    - name: "Centro"
+      city: "São Paulo"
+    - name: "Pinheiros"
+      city: "São Paulo"
+    - name: "Copacabana"
+      city: "Rio de Janeiro"
+
+  price_ranges:
+    - label: "econômico"
+      min: 150000
+      max: 350000
+    - label: "médio"
+      min: 350000
+      max: 700000
+    - label: "alto"
+      min: 700000
+      max: 1500000
+    - label: "luxo"
+      min: 1500000
+      max: 5000000
+
+  cache:
+    enabled: true
+    dir: "data/cache"
+    ttl_seconds: 1800
+```
+
+### Uso CLI (Pipeline Unificado)
+
+```bash
+cd ~/imoveis-watchdog
+
+# Crawl completo (todas as cidades, todos os bairros)
+python scripts/emcasa_collect.py
+
+# Apenas uma cidade
+python scripts/emcasa_collect.py --city "São Paulo"
+
+# Teste rápido (limitar páginas por região)
+python scripts/emcasa_collect.py --max-pages 2
+
+# Dry-run (mostra o que seria feito)
+python scripts/emcasa_collect.py --dry-run
+
+# Salvar em arquivo específico
+python scripts/emcasa_collect.py --output data/results/sp_full.json
+```
+
+### Integração com PaginatedCache + TokenBucket
+
+O `EmCasaClient` aceita parâmetros opcionais que substituem os mecanismos built-in:
+
+```python
+from skills.cache.cache_engine import PaginatedCache
+from skills.rate_limiter.rate_limiter import TokenBucket
+from skills.emcasa.emcasa_api import EmCasaClient, filter_city
+
+cache = PaginatedCache(cache_dir="data/cache", default_ttl_seconds=1800)
+bucket = TokenBucket(rate=2, burst=3)
+
+client = EmCasaClient(
+    rate_limiter=bucket,
+    paginated_cache=cache,
+)
+
+result = client.search_all(filter_city("São Paulo"), per_page=250)
+print(f"{len(result)} listings com {client.get_stats()['cache_hits']} cache hits")
+```
+
+**Prioridade do cache:**
+1. `paginated_cache` (PaginatedCache externo) — usado quando fornecido
+2. `cache` (PageCache built-in) — fallback legado
+
+**Rate limiting:**
+1. `rate_limiter` (TokenBucket externo) — usado quando fornecido
+2. `delay` simples — fallback legado (`time.sleep`)
+
+### Facet Stats
+
+O script `scripts/facet_stats.py` computa estatísticas agregadas de datasets coletados:
+
+```bash
+# Analisar datasets específicos
+python scripts/facet_stats.py data/results/emcasa_collect_*.json
+
+# Salvar facets como JSON
+python scripts/facet_stats.py --output data/facets.json
+
+# Todos os datasets em data/results/
+python scripts/facet_stats.py
+```
+
+**Saída:** preço (min/max/média/mediana), área (min/max/média), quartos (distribuição), tipos, fontes, bairros, cidades, total de fotos.
 
 ---
 
@@ -246,12 +383,40 @@ if result["priceChangePercent"] and result["priceChangePercent"] < 0:
 
 ## Cache (API Foundation)
 
-O `PageCache` salva cada página como arquivo JSON em `data/emcasa_cache/`.
+O EmCasaClient suporta **dois sistemas de cache** que podem ser usados independentemente:
+
+### 1. PageCache (built-in, legado)
+Cache local salvo em `data/emcasa_cache/`.
 
 - **Chave:** hash MD5 do filtro + página + per_page
 - **Primeira página:** sempre API real (descobre `found` e `nb_pages`)
 - **Páginas subsequentes:** usam cache quando disponível
 - **Limpeza:** `rm -rf data/emcasa_cache/`
+
+### 2. PaginatedCache (externo, pipeline unificado)
+Cache em `skills/cache/cache_engine.py` com TTL configurável, namespace e escrita atômica.
+
+- **Chave:** `{namespace_sanitized}_p{page:04d}_{sha256[:12]}` — human-readable + hash
+- **TTL:** configurável (default 1800s), entradas expiradas são removidas na leitura
+- **Namespace:** agrupa páginas da mesma cidade+bairro (ex.: `location_state:=SP && location_city:=São Paulo`)
+- **Thread-safe:** Lock  por instância, escrita atômica via `.tmp` + `rename`
+- **Factory:** `create_cache(config_dict)` lê de dict — compatível com `watchdog.yaml`
+- **NullCache:** no-op para desabilitar cache sem mudar código
+- **26 testes** — miss/hit, TTL, invalidação por namespace, thread safety (10 threads × 20 ops)
+- **clear_expired():** varredura periódica para remover entradas vencidas
+
+```python
+from skills.cache.cache_engine import PaginatedCache, create_cache
+
+# Direto
+cache = PaginatedCache(cache_dir="data/cache", default_ttl_seconds=1800)
+
+# Via factory (lê de watchdog.yaml)
+cache = create_cache({"enabled": True, "dir": "data/cache", "ttl_seconds": 1800})
+
+# Uso
+data = cache.get_or_fetch("location_state:=SP", 1, lambda: api.search_page(...))
+```
 
 ---
 
@@ -261,6 +426,16 @@ O `PageCache` salva cada página como arquivo JSON em `data/emcasa_cache/`.
 |-----------|-------------------:|-------------------:|
 | Algolia SSR (delay 1s) | ~46 min | ~5 min |
 | API Foundation (delay 0.5s, 250/página) | ~2.5 min | ~20s (32 páginas) |
+| **Pipeline Unificado** (2 req/s com cache, 250/página) | **~21s** (4 req reais, 44 cache hits) | **~3s** |
+
+**Pipeline Unificado (28 regiões configuradas):**
+- 787 listings coletados
+- 4 requisições reais à API (44 cache hits — 91% hit rate)
+- 0 erros
+- 3.8s runtime total
+- TokenBucket 2 req/s, burst=3
+- PaginatedCache TTL=1800s
+- preço/neighborhood filtering post-fetch
 
 ---
 
@@ -298,6 +473,15 @@ python -m pytest skills/emcasa/test_extract_page.py -v
 # API Foundation (22 unitários + 3 integração)
 python -m pytest skills/emcasa/test_emcasa_api.py -v
 EMCASA_INTEGRATION=1 python -m pytest skills/emcasa/test_emcasa_api.py -v -k Integration
+
+# Cache Engine (26 testes - PaginatedCache, NullCache, factory)
+python -m pytest skills/cache/test_cache_engine.py -v
+
+# Rate Limiter (30 testes - TokenBucket sync+async, HTTP wrappers)
+python -m pytest skills/rate_limiter/test_rate_limiter.py -v
+
+# Todos os testes
+python -m pytest skills/emcasa/ skills/cache/ skills/rate_limiter/ -v
 ```
 
 ## Descobertas da Investigação
@@ -309,3 +493,5 @@ EMCASA_INTEGRATION=1 python -m pytest skills/emcasa/test_emcasa_api.py -v -k Int
 5. **Dados completos** — preço, área, fotos, condomínio, IPTU, amenities, coordenadas
 6. **Redução de preço detectável** — `previousPrice` + `priceChangePercent` disponíveis
 7. **IDs dos imóveis** são UUIDs
+8. **Pipeline unificado** — PaginatedCache + TokenBucket integrados ao EmCasaClient para coleta eficiente em lote com 91% cache hit rate
+9. **Facet stats** — script dedicado `scripts/facet_stats.py` que computa estatísticas agregadas de datasets coletados de qualquer fonte

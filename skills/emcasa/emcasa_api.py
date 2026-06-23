@@ -22,10 +22,20 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+
+# ── Imports externos (opcionais — usados quando integrados ao pipeline) ──
+try:
+    from skills.cache.cache_engine import PaginatedCache as ExtPaginatedCache
+    from skills.rate_limiter.rate_limiter import TokenBucket as ExtTokenBucket
+    _HAS_EXT_DEPS = True
+except ImportError:
+    ExtPaginatedCache = None  # type: ignore
+    ExtTokenBucket = None     # type: ignore
+    _HAS_EXT_DEPS = False
 
 logger = logging.getLogger("emcasa_api")
 
@@ -160,22 +170,49 @@ class PageCache:
 # ── Cliente da API ─────────────────────────────────────────────────────────────
 
 class EmCasaClient:
-    """Cliente HTTP para a API de busca do EmCasa (Foundation/Garagem AI)."""
+    """Cliente HTTP para a API de busca do EmCasa (Foundation/Garagem AI).
+
+    Suporta duas formas de cache e rate limiting:
+      1. **Built-in (simples):** ``PageCache`` e ``delay`` (legado)
+      2. **Externo (pipeline padrão):** ``PaginatedCache`` (de cache_engine) e
+         ``TokenBucket`` (de rate_limiter) — preferido para o pipeline unificado.
+
+    Quando ``rate_limiter`` (TokenBucket) é fornecido, ele substitui o
+    ``delay`` simples.  Quando ``paginated_cache`` (PaginatedCache) é
+    fornecido, ele é usado EM VEZ do ``cache`` (PageCache) para operações
+    de cache.
+    """
 
     def __init__(
         self,
         delay: float = DEFAULT_DELAY,
         cache: Optional[PageCache] = None,
         user_agent: str = "imoveis-watchdog/1.0",
+        # ── Parâmetros externos (integração pipeline) ──
+        rate_limiter: "Optional[Any]" = None,
+        paginated_cache: "Optional[Any]" = None,
     ):
         self.delay = delay
-        self.cache = cache
+        self._page_cache = cache  # built-in PageCache (legado)
+        self._paginated_cache = paginated_cache  # PaginatedCache externo
         self.user_agent = user_agent
+        self._rate_limiter = rate_limiter
         self._last_request = 0.0
         self._stats = {"requests": 0, "cache_hits": 0, "errors": 0}
 
+    @property
+    def cache(self):
+        """Retorna o cache ativo (prioriza o PaginatedCache externo)."""
+        return self._paginated_cache or self._page_cache
+
     def _rate_limit(self):
-        """Aguarda o delay mínimo entre requisições."""
+        """Aguarda o delay mínimo entre requisições.
+
+        Usa ``TokenBucket`` se fornecido, senão cai para ``time.sleep(delay)``.
+        """
+        if self._rate_limiter is not None:
+            self._rate_limiter.acquire()
+            return
         elapsed = time.time() - self._last_request
         if elapsed < self.delay:
             time.sleep(self.delay - elapsed)
@@ -227,11 +264,22 @@ class EmCasaClient:
             EmCasaSearchResult com os resultados.
         """
         # Verifica cache primeiro
-        if self.cache:
-            cached = self.cache.get(filter_by, page, per_page)
+        # PaginatedCache (externo): get(namespace, page)
+        if self._paginated_cache:
+            cached = self._paginated_cache.get(filter_by, page)
             if cached is not None:
                 self._stats["cache_hits"] += 1
+                hits = cached if isinstance(cached, list) else cached.get("hits", [])
                 # Retorna um resultado sintético (sem found/nbPages do cache)
+                return EmCasaSearchResult(
+                    found=len(hits), page=page, per_page=per_page,
+                    hits=hits, facet_counts=[], out_of=0,
+                )
+        # PageCache (built-in legado): get(filter_by, page, per_page)
+        elif self._page_cache:
+            cached = self._page_cache.get(filter_by, page, per_page)
+            if cached is not None:
+                self._stats["cache_hits"] += 1
                 return EmCasaSearchResult(
                     found=0, page=page, per_page=per_page,
                     hits=cached, facet_counts=[], out_of=0,
@@ -284,8 +332,10 @@ class EmCasaClient:
         )
 
         # Salva no cache
-        if self.cache:
-            self.cache.put(filter_by, page, per_page, result.hits)
+        if self._paginated_cache:
+            self._paginated_cache.set(filter_by, page, {"hits": result.hits})
+        elif self._page_cache:
+            self._page_cache.put(filter_by, page, per_page, result.hits)
 
         return result
 
@@ -316,15 +366,22 @@ class EmCasaClient:
         """
         # Primeira página — descobre total e nb_pages (SEMPRE via API)
         # Guarda cache original para restaurar depois
-        orig_cache = self.cache
-        self.cache = None
-        try:
+        # Nota: para o PaginatedCache externo, NÃO desabilitamos — ele
+        # gerencia miss/hit corretamente com get_or_fetch.
+        if self._paginated_cache:
             first = self.search_page(filter_by, page=1, per_page=per_page)
-        finally:
-            self.cache = orig_cache
+        else:
+            orig_cache = self._page_cache
+            self._page_cache = None
+            try:
+                first = self.search_page(filter_by, page=1, per_page=per_page)
+            finally:
+                self._page_cache = orig_cache
 
         # Salva no cache após a chamada real (se cache ativo)
-        if orig_cache:
+        if self._paginated_cache:
+            self._paginated_cache.set(filter_by, 1, {"hits": first.hits})
+        elif orig_cache:
             orig_cache.put(filter_by, 1, per_page, first.hits)
 
         all_hits = list(first.hits)

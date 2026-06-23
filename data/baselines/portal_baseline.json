@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-06-23T13:46:37.254913+00:00",
+  "total_listings": 6,
+  "overall_hash": "195ba1e17b065fb209f74ed53460a7da26278544586cb7e02d08b535940f0829",
+  "portals": {
+    "quintoandar": {
+      "count": 3,
+      "preco_min": 280000.0,
+      "preco_max": 520000.0,
+      "hash": "97e2b8f93862df5952653495beb23bc03eac0ba91e11c5aa5ce7ed636a344af4"
+    },
+    "loft": {
+      "count": 3,
+      "preco_min": 345000.0,
+      "preco_max": 950000.0,
+      "hash": "69d172932b86ff98ce7b10bd2ba9b1d2243ddab60ac4366cfde76cbe97286d92"
+    }
+  }
+}
