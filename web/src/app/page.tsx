@@ -74,13 +74,13 @@ function BuscaCard({ busca }: { busca: Busca }) {
   return (
     <Link
       href={`/busca/${busca.id}`}
-      className="block rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
+      className="block rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden min-w-0"
     >
-      <div className="flex items-start justify-between mb-2">
-        <h3 className="font-semibold text-base">{busca.nome}</h3>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h3 className="font-semibold text-base truncate min-w-0">{busca.nome}</h3>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-2xl font-bold text-[var(--primary)]">{busca.resultado_count}</span>
-          <span className="text-xs text-[var(--muted-foreground)]">imóveis</span>
+          <span className="text-xs text-[var(--muted-foreground)] whitespace-nowrap">imóveis</span>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 overflow-x-hidden">
       {/* Header */}
       <header className="mb-8">
         <div className="flex items-center gap-3 mb-1">
