@@ -497,6 +497,62 @@ def get_enabled_portals() -> list[dict]:
 # ── Extraction runners ─────────────────────────────────────────────────────
 
 
+def _extract_leilao_live(portal_slug: str, target: dict) -> list[dict]:
+    """Tenta extração ao vivo para portais de leilão com fetch direto.
+
+    Portais com API pública aberta (Sodré Santoro, Zuk) podem ser
+    extraídos sob demanda sem browser.
+    """
+    import logging as _lg
+    _lg.getLogger("sodre_santoro_parser").setLevel(_lg.WARNING)
+    _lg.getLogger("zuk_parser").setLevel(_lg.WARNING)
+
+    try:
+        if portal_slug == "sodre_santoro":
+            sys.path.insert(0, str(REPO_ROOT / "skills" / "sodre_santoro"))
+            from sodre_santoro_parser import fetch_listings
+            imoveis = fetch_listings(max_pages=1)
+            return [i for i in imoveis if i]
+
+        elif portal_slug == "zuk":
+            sys.path.insert(0, str(REPO_ROOT / "skills" / "zuk"))
+            from zuk_parser import crawl_listing
+            pages = crawl_listing(
+                start_url="https://www.portalzuk.com.br/leilao-de-imoveis?page=1",
+                pages=2,
+                rate_limit=1.0,
+                timeout=60,
+            )
+            raw = pages[0] if isinstance(pages, (list, tuple)) and len(pages) > 0 else []
+            if not raw:
+                return []
+            # Convert raw listings to unified schema via from_zuk_payload
+            from zuk_parser import from_zuk_payload
+            return from_zuk_payload(raw)
+
+        elif portal_slug == "biasi_leiloes":
+            # Biasi has parser but no direct live fetch — fall through to pre-coletados
+            return []
+
+        elif portal_slug == "mega_leiloes":
+            return []
+
+        elif portal_slug == "caixa_imoveis":
+            return []
+
+        elif portal_slug == "lello_imoveis":
+            return []
+
+    except ImportError as e:
+        _lg.getLogger("extractor").debug(f"  _extract_leilao_live({portal_slug}): {e}")
+        return []
+    except Exception as e:
+        _lg.getLogger("extractor").warning(f"  _extract_leilao_live({portal_slug}) erro: {e}")
+        return []
+
+    return []
+
+
 def extract_portal(
     portal_slug: str,
     target: dict,
@@ -516,7 +572,13 @@ def extract_portal(
     Returns:
         Lista de dicts no schema Imovel (to_dict()).
     """
-    # Tenta dados pré-coletados
+    # 1. Tenta extração ao vivo para portais de leilão
+    live = _extract_leilao_live(portal_slug, target)
+    if live:
+        logger.info(f"  {portal_slug}: {len(live)} listings (live extraction)")
+        return live
+
+    # 2. Tenta dados pré-coletados
     pre_coletados = _load_pre_coletados(portal_slug)
     if pre_coletados:
         logger.info(f"  {portal_slug}: {len(pre_coletados)} listings pré-coletados")
@@ -567,12 +629,13 @@ def _load_pre_coletados(portal_slug: str) -> list[dict]:
     try:
         with open(latest) as f:
             data = json.load(f)
-        listings = data.get("listings", data.get("results", data.get("imoveis", [])))
-        if isinstance(listings, list):
-            return listings
         # Arquivo é uma lista direta
         if isinstance(data, list):
             return data
+        # Arquivo é dict com chave listings/results/imoveis
+        listings = data.get("listings", data.get("results", data.get("imoveis", [])))
+        if isinstance(listings, list):
+            return listings
         return []
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"  Erro lendo {latest}: {e}")

@@ -67,6 +67,43 @@ lello:
       preco_max: null
       quartos_min: null
 
+# Leilões de Imóveis
+sodre_santoro:
+  leilao:
+    - uf: "SP"
+      tipos: ["apartamento", "casa", "terreno", "imovel_residencial"]
+      preco_max: null
+
+zuk:
+  leilao:
+    - uf: "TODAS"
+      tipos: ["residencial", "comercial", "terreno"]
+      preco_max: null
+
+biasi_leiloes:
+  leilao:
+    - uf: "SP"
+      tipos: ["apartamento", "casa", "terreno"]
+      preco_max: null
+
+mega_leiloes:
+  leilao:
+    - uf: "TODAS"
+      tipos: ["apartamento", "casa", "terreno"]
+      preco_max: null
+
+caixa_imoveis:
+  leilao:
+    - uf: "SP"
+      tipos: ["apartamento", "casa"]
+      preco_max: null
+
+lello_imoveis:
+  leilao:
+    - uf: "SP"
+      tipos: ["apartamento", "casa", "terreno", "comercial"]
+      preco_max: null
+
 # Config geral
 geral:
   intervalo_horas: 6  # a cada 6 horas
