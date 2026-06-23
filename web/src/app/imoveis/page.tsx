@@ -1,6 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,25 +12,48 @@ import {
 } from "lucide-react";
 import { ImovelCard } from "@/components/ImovelCard";
 import type { ImovelData } from "@/components/ImovelCard";
+import SortBar from "@/components/SortBar";
+import type { SortField, SortOrder } from "@/components/SortBar";
 
 const PER_PAGE = 50;
 
-export default function ImoveisPage() {
+function Loading() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
+      </div>
+    </div>
+  );
+}
+
+function ImoveisContent() {
+  const sp = useSearchParams();
+  const router = useRouter();
+
   const [imoveis, setImoveis] = useState<ImovelData[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(sp.get("bairro") || "");
   const [page, setPage] = useState(0);
+
+  const sort = (sp.get("sort") as SortField) || "data";
+  const order = (sp.get("order") as SortOrder) || "desc";
+
+  function buildUrl(s: SortField, o: SortOrder, p: number, bairro: string) {
+    const q = new URLSearchParams();
+    q.set("limit", String(PER_PAGE));
+    q.set("offset", String(p * PER_PAGE));
+    q.set("sort", s);
+    q.set("order", o);
+    if (bairro) q.set("bairro", bairro);
+    return `/api/imoveis?${q}`;
+  }
 
   const fetchImoveis = useCallback(async () => {
     setLoading(true);
     try {
-      const sp = new URLSearchParams();
-      sp.set("limit", String(PER_PAGE));
-      sp.set("offset", String(page * PER_PAGE));
-      if (searchTerm) sp.set("bairro", searchTerm);
-
-      const res = await fetch(`/api/imoveis?${sp}`);
+      const res = await fetch(buildUrl(sort, order, page, searchTerm));
       const data = await res.json();
       setImoveis(data.imoveis);
       setTotal(data.total);
@@ -37,17 +62,29 @@ export default function ImoveisPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, page]);
+  }, [sort, order, page, searchTerm]);
 
   useEffect(() => {
     fetchImoveis();
   }, [fetchImoveis]);
 
+  function handleSortChange(newSort: SortField, newOrder: SortOrder) {
+    setPage(0);
+    const q = new URLSearchParams(sp.toString());
+    q.set("sort", newSort);
+    q.set("order", newOrder);
+    router.replace(`/imoveis?${q}`, { scroll: false });
+  }
+
+  function handleSearch(value: string) {
+    setSearchTerm(value);
+    setPage(0);
+  }
+
   const totalPages = Math.ceil(total / PER_PAGE);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3 min-w-0">
           <Link href="/" className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
@@ -60,21 +97,20 @@ export default function ImoveisPage() {
         </div>
       </div>
 
-      {/* Simple search bar */}
-      <div className="mb-6">
-        <div className="relative max-w-md">
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--muted-foreground)]" />
           <input
             type="text"
             placeholder="Buscar por bairro..."
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+            onChange={(e) => handleSearch(e.target.value)}
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] pl-9 pr-4 py-2.5 text-sm outline-none focus:border-[var(--primary)] transition-colors"
           />
         </div>
+        <SortBar sort={sort} order={order} onChange={handleSortChange} />
       </div>
 
-      {/* Results */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-pulse text-[var(--muted-foreground)]">Buscando imóveis...</div>
@@ -115,5 +151,13 @@ export default function ImoveisPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function ImoveisPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <ImoveisContent />
+    </Suspense>
   );
 }

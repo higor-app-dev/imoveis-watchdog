@@ -59,6 +59,8 @@ export interface ImovelFilters {
   fonte?: string;
   limit?: number;
   offset?: number;
+  sort?: "data" | "preco" | "area";
+  order?: "asc" | "desc";
 }
 
 // --- Raw Turso REST API via fetch ---
@@ -233,10 +235,21 @@ export async function listImoveis(filters: ImovelFilters = {}): Promise<{ imovei
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
 
+  // Build ORDER BY
+  const sortField = filters.sort ?? "data";
+  const sortOrder = filters.order ?? "desc";
+  const orderMap: Record<string, string> = {
+    data: "data_primeira_vista",
+    preco: "COALESCE(preco_venda, 999999999)",
+    area: "COALESCE(area_m2, 0)",
+  };
+  const orderCol = orderMap[sortField] ?? "data_primeira_vista";
+  const orderDir = sortOrder === "asc" ? "ASC" : "DESC";
+
   const [countRows, dataRows] = await Promise.all([
     query(`SELECT COUNT(*) as total FROM imoveis_watchdog ${where}`, args),
     query(
-      `SELECT * FROM imoveis_watchdog ${where} ORDER BY data_ultima_vista DESC LIMIT ? OFFSET ?`,
+      `SELECT * FROM imoveis_watchdog ${where} ORDER BY ${orderCol} ${orderDir} LIMIT ? OFFSET ?`,
       [...args, limit, offset]
     ),
   ]);

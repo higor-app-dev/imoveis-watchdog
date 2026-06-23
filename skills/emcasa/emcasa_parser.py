@@ -19,6 +19,7 @@ Uso:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -161,18 +162,31 @@ def from_emcasa_hit(
     raw_id = d.get("id") or d.get("unitKey") or d.get("objectID") or ""
     imovel_id = _as_str(raw_id)
     if not imovel_id:
-        log_warning("Hit sem id, unitKey nem objectID — ID vazio")
+        # Gera hash deterministico a partir de campos identificadores
+        id_fields = (
+            _as_str(d.get("propertyTitle", "")),
+            _as_str(d.get("location_street", "")),
+            _as_str(d.get("property_area_total", 0)),
+            _as_str(d.get("bedrooms", 0)),
+            _as_str(d.get("parkingSpaces", 0)),
+        )
+        id_source = "|".join(id_fields)
+        if id_source.strip("|0"):
+            imovel_id = hashlib.md5(id_source.encode()).hexdigest()[:12]
+        else:
+            log_warning("Hit sem campos identificadores — ID vazio")
 
     # ─ Título ──────────────────────────────────────────────────────────────
     titulo = _as_str(
         d.get("unitDescription")
         or d.get("title")
         or d.get("name")
+        or d.get("propertyTitle")
         or ""
     )
     if not titulo:
         # Monta título automático
-        tipo_label = _map_tipo(_as_str(d.get("propertyType", "")))
+        tipo_label = _map_tipo(_as_str(d.get("propertyType", "") or d.get("property_type", "")))
         bairro = _as_str(d.get("neighborhood") or d.get("location_neighborhood") or "")
         qtd = d.get("bedrooms")
         parts = [p for p in [tipo_label, f"{qtd}q" if qtd else "", bairro] if p]
@@ -181,6 +195,8 @@ def from_emcasa_hit(
     # ─ URL ─────────────────────────────────────────────────────────────────
     slug = _as_str(d.get("slug") or d.get("unitKey") or imovel_id)
     url = f"https://www.emcasa.com/imovel/{slug}" if slug else ""
+    if not url:
+        url = d.get("url", d.get("listing_url", ""))
 
     # ─ Preços ──────────────────────────────────────────────────────────────
     preco_venda = _to_float(d.get("askingPrice"))
@@ -200,7 +216,7 @@ def from_emcasa_hit(
     area = area_total or area_util
 
     # ─ Tipo ────────────────────────────────────────────────────────────────
-    tipo_original = _as_str(d.get("propertyType", "")).lower()
+    tipo_original = _as_str(d.get("propertyType", "") or d.get("property_type", "")).lower()
     tipo = TIPO_MAP.get(tipo_original, tipo_original)
 
     # ─ Endereço ────────────────────────────────────────────────────────────

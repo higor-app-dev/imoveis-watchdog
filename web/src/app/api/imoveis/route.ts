@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
       vagas_min: searchParams.get("vagas_min")
         ? Number(searchParams.get("vagas_min"))
         : undefined,
+      sort: (searchParams.get("sort") as "data" | "preco" | "area") || undefined,
+      order: (searchParams.get("order") as "asc" | "desc") || undefined,
       limit: searchParams.get("limit")
         ? Number(searchParams.get("limit"))
         : 50,

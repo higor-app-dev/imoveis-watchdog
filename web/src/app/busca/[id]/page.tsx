@@ -1,19 +1,19 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
   Search,
-  MapPin,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  DollarSign,
 } from "lucide-react";
 import { ImovelCard, formatPrice } from "@/components/ImovelCard";
 import type { ImovelData } from "@/components/ImovelCard";
+import SortBar from "@/components/SortBar";
+import type { SortField, SortOrder } from "@/components/SortBar";
 
 interface Busca {
   id: number;
@@ -42,9 +42,30 @@ function formatDate(iso: string | null): string {
   });
 }
 
+function Loading() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
+      </div>
+    </div>
+  );
+}
+
 export default function BuscaPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <BuscaContent />
+    </Suspense>
+  );
+}
+
+function BuscaContent() {
   const params = useParams();
+  const sp = useSearchParams();
+  const router = useRouter();
   const id = Number(params.id);
+
   const [busca, setBusca] = useState<Busca | null>(null);
   const [imoveis, setImoveis] = useState<ImovelData[]>([]);
   const [total, setTotal] = useState(0);
@@ -52,9 +73,21 @@ export default function BuscaPage() {
   const [page, setPage] = useState(0);
   const PER_PAGE = 50;
 
+  const sort = (sp.get("sort") as SortField) || "data";
+  const order = (sp.get("order") as SortOrder) || "desc";
+
+  function buildUrl(s: SortField, o: SortOrder, p: number) {
+    const q = new URLSearchParams();
+    q.set("limit", String(PER_PAGE));
+    q.set("offset", String(p * PER_PAGE));
+    q.set("sort", s);
+    q.set("order", o);
+    return `/api/buscas/${id}/imoveis?${q}`;
+  }
+
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/buscas/${id}/imoveis?limit=${PER_PAGE}&offset=${page * PER_PAGE}`)
+    fetch(buildUrl(sort, order, page))
       .then((r) => r.json())
       .then((data) => {
         setBusca(data.busca);
@@ -63,7 +96,15 @@ export default function BuscaPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [id, page]);
+  }, [id, sort, order, page]);
+
+  function handleSortChange(newSort: SortField, newOrder: SortOrder) {
+    setPage(0);
+    const q = new URLSearchParams(sp.toString());
+    q.set("sort", newSort);
+    q.set("order", newOrder);
+    router.replace(`/busca/${id}?${q}`, { scroll: false });
+  }
 
   const totalPages = Math.ceil(total / PER_PAGE);
 
@@ -82,7 +123,7 @@ export default function BuscaPage() {
 
       {/* Search Config Info */}
       {busca && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="flex items-center gap-2 mb-2">
             <Search className="size-4 text-[var(--primary)]" />
             <span className="text-sm font-medium">Configuração da Busca</span>
@@ -104,6 +145,11 @@ export default function BuscaPage() {
           </div>
         </div>
       )}
+
+      {/* Sort Bar */}
+      <div className="mb-4">
+        <SortBar sort={sort} order={order} onChange={handleSortChange} />
+      </div>
 
       {/* Results */}
       {loading ? (

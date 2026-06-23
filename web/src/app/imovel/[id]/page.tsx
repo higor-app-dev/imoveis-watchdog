@@ -250,15 +250,17 @@ export default function ImovelDetailPage() {
           )}
 
           {/* External Link */}
-          <a
-            href={imovel.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] px-4 py-3 text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <ExternalLink className="size-4" />
-            Ver anúncio original
-          </a>
+          {imovel.url && (
+            <a
+              href={imovel.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] px-4 py-3 text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <ExternalLink className="size-4" />
+              Ver anúncio original
+            </a>
+          )}
         </div>
       </div>
     </div>
