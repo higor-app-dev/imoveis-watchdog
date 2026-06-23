@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -92,11 +92,15 @@ function ImageSlider({ images, title }: { images: string[]; title: string }) {
   );
 }
 
-export default function ImovelDetailPage() {
+function ImovelDetailContent() {
   const params = useParams();
+  const sp = useSearchParams();
   const id = decodeURIComponent(params.id as string);
   const { imovel, loading, error } = useImovel(id);
   const [showMap, setShowMap] = useState(false);
+
+  const ref = sp.get("ref") || "";
+  const backHref = ref || "/";
 
   const images: string[] = (() => {
     if (!imovel) return [];
@@ -137,7 +141,10 @@ export default function ImovelDetailPage() {
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Back */}
       <div className="mb-6">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+        >
           <ArrowLeft className="size-4" />
           Voltar
         </Link>
@@ -152,7 +159,7 @@ export default function ImovelDetailPage() {
 
           {images.length > 1 && (
             <Link
-              href={`/imovel/${encodeURIComponent(id)}/galeria`}
+              href={`/imovel/${encodeURIComponent(id)}/galeria${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`}
               className="mt-3 inline-flex items-center gap-1.5 text-sm text-[var(--primary)] hover:underline"
             >
               <Grid3X3 className="size-4" />
@@ -285,5 +292,17 @@ export default function ImovelDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ImovelDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-dvh items-center justify-center">
+        <div className="animate-pulse text-[var(--muted-foreground)]">Carregando...</div>
+      </div>
+    }>
+      <ImovelDetailContent />
+    </Suspense>
   );
 }

@@ -77,12 +77,15 @@ function ModalidadeBadge({ m }: { m: string }) {
 }
 
 // --- Imóvel Card ---
-export function ImovelCard({ imovel }: { imovel: ImovelData }) {
+export function ImovelCard({ imovel, ref: refPath }: { imovel: ImovelData; ref?: string }) {
   const title = imovel.titulo || `${imovel.bairro}${imovel.cidade ? `, ${imovel.cidade}` : ""}`;
 
+  const href = refPath
+    ? `/imovel/${encodeURIComponent(imovel.id)}?ref=${encodeURIComponent(refPath)}`
+    : `/imovel/${encodeURIComponent(imovel.id)}`;
+
   return (
-    <Link
-      href={`/imovel/${encodeURIComponent(imovel.id)}`}
+    <Link href={href}
       className="group block rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5"
     >
       {/* Image */}

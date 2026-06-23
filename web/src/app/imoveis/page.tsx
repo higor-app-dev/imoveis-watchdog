@@ -136,7 +136,7 @@ function ImoveisContent() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {imoveis.map((i) => (
-              <ImovelCard key={i.id} imovel={i} />
+              <ImovelCard key={i.id} imovel={i} ref="/imoveis" />
             ))}
           </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -21,11 +21,15 @@ function Loading() {
   );
 }
 
-export default function GaleriaPage() {
+function GaleriaContent() {
   const params = useParams();
+  const sp = useSearchParams();
   const id = decodeURIComponent(params.id as string);
   const { imovel, loading, error } = useImovel(id);
   const [lightbox, setLightbox] = useState<number | null>(null);
+
+  const ref = sp.get("ref") || "";
+  const backHref = `/imovel/${encodeURIComponent(id)}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`;
 
   // Build image list
   const images: string[] = (() => {
@@ -65,7 +69,7 @@ export default function GaleriaPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Link
-            href={`/imovel/${encodeURIComponent(id)}`}
+            href={backHref}
             className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
             <ArrowLeft className="size-5" />
@@ -116,7 +120,7 @@ export default function GaleriaPage() {
         {/* Back link */}
         <div className="mt-8 text-center">
           <Link
-            href={`/imovel/${encodeURIComponent(id)}`}
+            href={backHref}
             className="inline-flex items-center gap-1.5 text-sm text-[var(--primary)] hover:underline"
           >
             <ArrowLeft className="size-4" />
@@ -199,5 +203,13 @@ export default function GaleriaPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function GaleriaPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <GaleriaContent />
+    </Suspense>
   );
 }
